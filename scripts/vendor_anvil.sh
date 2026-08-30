@@ -3,6 +3,8 @@
 # checkout, per PLAN.md §5. Re-run any time; the pinned upstream commit is
 # recorded in vendor/anvil/COMMIT. Never hand-edit vendored files.
 #
+# macOS only (uses BSD sed -i '').
+#
 #   scripts/vendor_anvil.sh [ANVIL_CHECKOUT_DIR]     (default: ../../anvil)
 set -euo pipefail
 
@@ -20,7 +22,7 @@ rm -rf "$DEST"
 mkdir -p "$DEST/swift" "$DEST/android/gradle" "$DEST/flutter" "$DEST/react-native" "$DEST/fonts"
 
 # --- Swift: SPM package as-is -------------------------------------------------
-rsync -a --exclude '.build' "$ANVIL_DIR/swift/Anvil" "$DEST/swift/"
+rsync -a --exclude '.build' --exclude '.swiftpm' "$ANVIL_DIR/swift/Anvil" "$DEST/swift/"
 
 # --- Android: anvil-tokens + anvil-material3 + root build scaffolding ---------
 # The root build.gradle.kts (group/version -> includeBuild substitution),
@@ -57,6 +59,22 @@ android.builtInKotlin=false
 android.newDsl=false
 EOF
 
+# Post-assertions (m4): fail loudly on upstream drift instead of vending a
+# silently-broken copy. sed anchors must have matched, and the trimmed
+# settings must include EXACTLY the two modules we copy (a new upstream
+# module would otherwise keep its include line with no directory behind it).
+grep -q '^agp = "9.3.1"' "$DEST/android/gradle/libs.versions.toml" || {
+  echo "error: agp override did not apply — upstream catalog format changed?" >&2; exit 1; }
+grep -q '^kotlin = "2.4.10"' "$DEST/android/gradle/libs.versions.toml" || {
+  echo "error: kotlin override did not apply — upstream catalog format changed?" >&2; exit 1; }
+remaining="$(grep -oE 'include\(":[^"]+"\)' "$DEST/android/settings.gradle.kts" | sort)"
+expected="$(printf 'include(":anvil-material3")\ninclude(":anvil-tokens")' | sort)"
+if [[ "$remaining" != "$expected" ]]; then
+  echo "error: trimmed settings modules drifted — expected exactly anvil-tokens + anvil-material3, got:" >&2
+  echo "$remaining" >&2
+  exit 1
+fi
+
 # --- Flutter: pub package as-is (fonts bundled inside) ------------------------
 rsync -a --exclude 'build' --exclude '.dart_tool' --exclude 'pubspec.lock' \
   "$ANVIL_DIR/flutter/anvil" "$DEST/flutter/"
@@ -73,10 +91,11 @@ cp "$ANVIL_DIR/flutter/anvil/fonts/ibm_plex_mono_regular.ttf" \
    "$ANVIL_DIR/flutter/anvil/fonts/ibm_plex_mono_italic.ttf" "$DEST/fonts/"
 
 # --- Provenance ----------------------------------------------------------------
+branch="$(git -C "$ANVIL_DIR" branch --show-current 2>/dev/null || true)"
 {
   echo "source: $ANVIL_DIR"
   echo "commit: $(git -C "$ANVIL_DIR" rev-parse HEAD 2>/dev/null || echo 'unknown')"
-  echo "branch: $(git -C "$ANVIL_DIR" branch --show-current 2>/dev/null || echo 'unknown')"
+  echo "branch: ${branch:-detached-or-unknown}"
   echo "vendored_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$DEST/COMMIT"
 

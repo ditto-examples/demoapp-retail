@@ -24,6 +24,9 @@ android {
 
     buildFeatures {
         compose = true
+        // M2: enable buildConfig + inject the root .env (DITTO_DATABASE_ID /
+        // DITTO_DEVELOPMENT_TOKEN / DITTO_SERVER_URL) as BuildConfig fields,
+        // same pattern as mflix-mongodb-connector (PLAN §4.3).
     }
 
     compileOptions {

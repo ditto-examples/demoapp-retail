@@ -23,8 +23,11 @@ cp "$SRC" "$DEST_DIR/benchmarks.json"
   echo "synced_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$DEST_DIR/COMMIT"
 
-python3 -c "
-import json
-d = json.load(open('$DEST_DIR/benchmarks.json'))
-print(f'shared/benchmarks.json: {len(d)} benchmarks synced')
-"
+BENCH_OUT="$DEST_DIR/benchmarks.json" python3 - <<'PYEOF'
+import json, os, sys
+path = os.environ["BENCH_OUT"]
+d = json.load(open(path))
+if not isinstance(d, dict) or not d:
+    sys.exit(f"error: {path} is not a non-empty benchmark catalog")
+print(f"shared/benchmarks.json: {len(d)} benchmarks synced")
+PYEOF

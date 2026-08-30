@@ -31,6 +31,7 @@ answers.
 | Reset Big Peer data | `python3 scripts/load_data.py --clear` |
 | Re-vendor Anvil | `scripts/vendor_anvil.sh` |
 | Re-sync benchmark catalog | `scripts/sync_benchmarks.sh` |
+| Run tests | `python3 -m unittest discover -s tests -v` |
 | Android build | `cd android && ./gradlew :app:assembleDebug` |
 
 ## Dataset

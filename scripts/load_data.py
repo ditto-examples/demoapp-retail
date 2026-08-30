@@ -86,12 +86,15 @@ def load_config() -> dict:
 
 
 def execute_endpoint(raw_url: str) -> tuple[str, str]:
-    """Normalize the Cloud URL Endpoint -> (host, path) for HTTPS POST."""
-    url = raw_url.strip().rstrip("/")
-    if not url.startswith(("https://", "http://")):
-        url = "https://" + url
-    parts = urlsplit(url)
-    path = parts.path if "/api/" in parts.path else parts.path + "/api/v5/store/execute"
+    """Normalize the Cloud URL Endpoint -> (host, path) for an HTTPS POST.
+
+    Accepts the portal value with or without scheme (any case), with or
+    without a trailing slash, and with or without the /api/... path. Scheme is
+    always forced to https (BigPeerClient only speaks HTTPS).
+    """
+    url = re.sub(r"^https?://", "", raw_url.strip(), flags=re.IGNORECASE).rstrip("/")
+    parts = urlsplit("https://" + url)
+    path = parts.path if "/api/v" in parts.path else parts.path + "/api/v5/store/execute"
     return parts.netloc, path
 
 
@@ -100,7 +103,12 @@ def execute_endpoint(raw_url: str) -> tuple[str, str]:
 # --------------------------------------------------------------------------- #
 
 def extract_anchor_literals(benchmarks_path: Path) -> tuple[set, set, set]:
-    """Return (anchor_order_ids, anchor_customer_ids, anchor_emails)."""
+    """Return (anchor_order_ids, uuid_literals, anchor_emails).
+
+    UUID literals are returned UNRESOLVED: they may be customer ids, order_item
+    ids, or phantoms (e.g. stores.rls_user_id literals, which name no document
+    we load). plan_slices resolves them by existence-probing the collections.
+    """
     data = json.loads(benchmarks_path.read_text())
     literals: set[str] = set()
     for entry in data.values():
@@ -109,15 +117,15 @@ def extract_anchor_literals(benchmarks_path: Path) -> tuple[set, set, set]:
         for text in texts:
             literals.update(STRING_LITERAL_RE.findall(text))
 
-    order_ids, customer_ids, emails = set(), set(), set()
+    order_ids, uuids, emails = set(), set(), set()
     for lit in literals:
         if ORDER_ID_RE.match(lit):
             order_ids.add(lit)
         elif UUID_RE.match(lit):
-            customer_ids.add(lit)  # rls_user_id UUIDs too — harmless (stores load in full)
+            uuids.add(lit)
         elif "@" in lit:
             emails.add(lit)
-    return order_ids, customer_ids, emails
+    return order_ids, uuids, emails
 
 
 # --------------------------------------------------------------------------- #
@@ -133,30 +141,44 @@ def iter_ndjson(path: Path):
 
 
 def plan_slices(size_orders: int, dataset_dir: Path, benchmarks_path: Path,
-                full_catalog: bool) -> dict:
+                full_catalog: bool, total_orders: int = TOTAL_ORDERS) -> dict:
     """Pass 1: decide exactly which docs load. Returns per-collection plan.
 
     orders:     stride pick — line i loads iff floor(i*N/TOTAL) != floor((i-1)*N/TOTAL)
                 (exactly N evenly spaced picks spanning the full timeline),
                 PLUS anchor orders and orders by anchor customers.
+    order_items: rows whose order is in the slice, PLUS anchor items (with
+                their parent orders pulled into the slice so an anchored item
+                never dangles).
     customers:  union of sliced orders' customer_ids + anchor customers
                 (all 25,000 at 100k or with --full-catalog).
     """
-    anchor_orders, anchor_customers, anchor_emails = extract_anchor_literals(benchmarks_path)
+    anchor_orders, uuid_literals, anchor_emails = extract_anchor_literals(benchmarks_path)
 
-    # Resolve email literals to customer ids (one cheap scan).
-    if anchor_emails:
-        for doc, _ in iter_ndjson(dataset_dir / COLLECTION_FILES["customers"]):
-            if doc.get("email") in anchor_emails:
-                anchor_customers.add(doc["_id"])
-                anchor_emails.discard(doc.get("email"))
+    # One customers scan resolves email literals AND customer-id UUID literals.
+    anchor_customers: set[str] = set()
+    for doc, _ in iter_ndjson(dataset_dir / COLLECTION_FILES["customers"]):
+        if doc["_id"] in uuid_literals or doc.get("email") in anchor_emails:
+            anchor_customers.add(doc["_id"])
+    unresolved = uuid_literals - anchor_customers
+
+    # Remaining UUID literals may be order_item ids (e.g. order_items__select__by_id).
+    # Existence-probe items and pull their parent orders into the anchor set.
+    anchor_items: set[str] = set()
+    if unresolved:
+        for doc, _ in iter_ndjson(dataset_dir / COLLECTION_FILES["order_items"]):
+            if doc["_id"] in unresolved:
+                anchor_items.add(doc["_id"])
+                anchor_orders.add(doc["order_id"])
+        unresolved -= anchor_items
+    phantoms = unresolved  # e.g. stores.rls_user_id literals — expected, not loaded
 
     order_ids: set[str] = set()
     customer_ids: set[str] = set(anchor_customers)
     prev_bucket = -1
     anchors_hit_orders: set[str] = set()
     for i, (doc, _) in enumerate(iter_ndjson(dataset_dir / COLLECTION_FILES["orders"])):
-        bucket = (i * size_orders) // TOTAL_ORDERS
+        bucket = (i * size_orders) // total_orders
         on_stride = bucket != prev_bucket
         prev_bucket = bucket
         if on_stride or doc["_id"] in anchor_orders or doc.get("customer_id") in anchor_customers:
@@ -168,10 +190,13 @@ def plan_slices(size_orders: int, dataset_dir: Path, benchmarks_path: Path,
     plan = {
         "order_ids": order_ids,
         "customer_ids": customer_ids,
-        "all_customers": full_catalog or size_orders == TOTAL_ORDERS,
+        "item_ids": anchor_items,
+        "all_customers": full_catalog or size_orders >= total_orders,
         "anchors": {
             "order_literals": len(anchor_orders),
             "customer_literals": len(anchor_customers),
+            "item_literals": len(anchor_items),
+            "phantom_literals": len(phantoms),
             "anchor_orders_found": len(anchors_hit_orders),
         },
     }
@@ -187,9 +212,10 @@ def collection_docs(name: str, dataset_dir: Path, plan: dict):
             if doc["_id"] in wanted:
                 yield doc, n
     elif name == "order_items":
-        wanted = plan["order_ids"]
+        wanted_orders = plan["order_ids"]
+        wanted_items = plan.get("item_ids", set())
         for doc, n in iter_ndjson(path):
-            if doc["order_id"] in wanted:
+            if doc["order_id"] in wanted_orders or doc["_id"] in wanted_items:
                 yield doc, n
     elif name == "customers":
         if plan["all_customers"]:
@@ -208,16 +234,33 @@ def collection_docs(name: str, dataset_dir: Path, plan: dict):
 # --------------------------------------------------------------------------- #
 
 class BigPeerClient:
-    def __init__(self, host: str, path: str, api_key: str, max_attempts: int = MAX_ATTEMPTS):
+    """Minimal /api/v5/store/execute client.
+
+    conn_factory and sleep are injectable for tests. Retry matrix:
+    - retry: 408/425/429, any 5xx, network/timeout errors, 200-with-non-JSON
+      (proxy blips), and anything else unknown (bounded by max_attempts)
+    - fail fast: 400/401/403/404/413/422 (the request itself is wrong)
+    """
+
+    FATAL_STATUSES = {400, 401, 403, 404, 413, 422}
+    RETRYABLE_STATUSES = {408, 425, 429}
+
+    def __init__(self, host: str, path: str, api_key: str, max_attempts: int = MAX_ATTEMPTS,
+                 conn_factory=None, sleep=time.sleep):
         self.host, self.path, self.api_key = host, path, api_key
         self.max_attempts = max_attempts
+        self._conn_factory = conn_factory
+        self._sleep = sleep
         self._local = threading.local()
 
-    def _conn(self) -> http.client.HTTPSConnection:
+    def _conn(self):
         conn = getattr(self._local, "conn", None)
         if conn is None:
-            ctx = ssl.create_default_context()
-            conn = http.client.HTTPSConnection(self.host, timeout=120, context=ctx)
+            if self._conn_factory is not None:
+                conn = self._conn_factory()
+            else:
+                ctx = ssl.create_default_context()
+                conn = http.client.HTTPSConnection(self.host, timeout=120, context=ctx)
             self._local.conn = conn
         return conn
 
@@ -234,17 +277,25 @@ class BigPeerClient:
                 conn.request("POST", self.path, body=body, headers=headers)
                 resp = conn.getresponse()
                 payload = resp.read()
-                if resp.status == 200:
-                    return json.loads(payload)
-                if resp.status in (400, 401, 403, 404):
-                    raise FatalApiError(resp.status, payload.decode(errors="replace"))
-                last_err = RetryableApiError(resp.status, payload.decode(errors="replace"))
             except (OSError, http.client.HTTPException) as exc:
                 last_err = exc
-            # retryable: drop the connection, back off with jitter
+            else:
+                if resp.status == 200:
+                    try:
+                        return json.loads(payload)
+                    except json.JSONDecodeError:
+                        last_err = RetryableApiError(resp.status,
+                                                     f"non-JSON 200 body: {payload[:200]!r}")
+                elif resp.status in self.FATAL_STATUSES:
+                    raise FatalApiError(resp.status, payload.decode(errors="replace"))
+                else:
+                    # RETRYABLE_STATUSES, 5xx, 3xx, and anything unexpected —
+                    # bounded by max_attempts.
+                    last_err = RetryableApiError(resp.status, payload.decode(errors="replace"))
+            # retryable path: drop the connection, back off with jitter
             self._local.conn = None
             if attempt < self.max_attempts:
-                time.sleep(min(30.0, 0.5 * 2 ** attempt) + random.uniform(0, 0.5))
+                self._sleep(min(30.0, 0.5 * 2 ** attempt) + random.uniform(0, 0.5))
         raise RuntimeError(f"request failed after {self.max_attempts} attempts: {last_err}")
 
 
@@ -263,13 +314,18 @@ class FatalApiError(Exception):
 # --------------------------------------------------------------------------- #
 
 def batched(docs_iter, max_docs: int, max_bytes: int):
+    """Yield (batch, approx_bytes) staying UNDER both caps, except that a
+    single doc larger than max_bytes ships alone (caps are self-imposed —
+    Ditto publishes no JSON body limit). raw_len counts NDJSON characters;
+    that equals bytes for this pure-ASCII dataset and excludes the JSON
+    envelope, so the true body has modest headroom under the cap."""
     batch, size = [], 0
     for doc, raw_len in docs_iter:
-        batch.append(doc)
-        size += raw_len
-        if len(batch) >= max_docs or size >= max_bytes:
+        if batch and (len(batch) >= max_docs or size + raw_len > max_bytes):
             yield batch, size
             batch, size = [], 0
+        batch.append(doc)
+        size += raw_len
     if batch:
         yield batch, size
 
@@ -279,8 +335,9 @@ def load_collection(client: BigPeerClient, name: str, dataset_dir: Path, plan: d
     total = plan.get("expected", {}).get(name)
     statement = f"INSERT INTO {name} DOCUMENTS (:docs) ON ID CONFLICT DO UPDATE"
     sent = 0
-    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        pending: dict = {}
+    pool = ThreadPoolExecutor(max_workers=args.concurrency)
+    pending: dict = {}
+    try:
         for batch, _size in batched(collection_docs(name, dataset_dir, plan),
                                     args.batch_docs, args.batch_bytes):
             pending[pool.submit(client.execute, statement, {"docs": batch})] = len(batch)
@@ -290,6 +347,16 @@ def load_collection(client: BigPeerClient, name: str, dataset_dir: Path, plan: d
         while pending:
             sent += _collect(pending)
             _progress(name, sent, total)
+        pool.shutdown(wait=True)
+    except BaseException:
+        # A failed batch (or Ctrl-C) must not freeze the run behind a pool of
+        # retrying futures: cancel everything queued, then wait only for what
+        # is already in flight (bounded by the 120 s request timeout).
+        print(f"\n  [{name}] aborting — cancelling {len(pending)} queued batch(es); "
+              f"in-flight ones unwind within one request timeout", file=sys.stderr)
+        pool.shutdown(wait=False, cancel_futures=True)
+        pool.shutdown(wait=True)
+        raise
     print()
     return sent
 
@@ -345,30 +412,53 @@ def clear(client: BigPeerClient, only: set[str]):
 # main
 # --------------------------------------------------------------------------- #
 
+def positive_int(value: str) -> int:
+    iv = int(value)
+    if iv < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value!r}")
+    return iv
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--size", choices=SIZES, help="order count to load")
+    ap.add_argument("--size", choices=SIZES,
+                    help="order count to load (plus a few benchmark anchor docs)")
     ap.add_argument("--full-catalog", action="store_true",
                     help="load all 25,000 customers regardless of size")
     ap.add_argument("--only", help="comma-separated collections to load/clear")
     ap.add_argument("--clear", action="store_true", help="delete all docs from all 7 collections")
-    ap.add_argument("--verify-only", action="store_true", help="skip load, just run COUNT verification")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="skip load, just run COUNT verification (with --size: against the plan's expected counts)")
     ap.add_argument("--dry-run", action="store_true", help="compute the plan and print it; no HTTP")
     ap.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
     ap.add_argument("--benchmarks", type=Path, default=DEFAULT_BENCHMARKS)
-    ap.add_argument("--batch-docs", type=int, default=MAX_BATCH_DOCS)
-    ap.add_argument("--batch-bytes", type=int, default=MAX_BATCH_BYTES)
-    ap.add_argument("--concurrency", type=int, default=4)
+    ap.add_argument("--batch-docs", type=positive_int, default=MAX_BATCH_DOCS)
+    ap.add_argument("--batch-bytes", type=positive_int, default=MAX_BATCH_BYTES)
+    ap.add_argument("--concurrency", type=positive_int, default=4)
+    ap.add_argument("--total-orders", type=positive_int, default=TOTAL_ORDERS,
+                    help="lines in orders-full.ndjson — override if the dataset is regenerated")
     args = ap.parse_args()
 
     if not args.clear and not args.size and not args.verify_only:
         ap.error("one of --size, --clear, or --verify-only is required")
-    only = set(args.only.split(",")) if args.only else set(LOAD_ORDER)
+    if args.clear and (args.size or args.verify_only or args.dry_run):
+        ap.error("--clear cannot be combined with --size/--verify-only/--dry-run")
+    if args.dry_run and not args.size:
+        ap.error("--dry-run requires --size")
+
+    only = {c.strip() for c in args.only.split(",") if c.strip()} if args.only else set(LOAD_ORDER)
     unknown = only - set(LOAD_ORDER)
     if unknown:
         ap.error(f"unknown collections: {', '.join(sorted(unknown))}")
 
-    for name in only:
+    # Files the run will actually touch: the --only collections, plus (when
+    # planning) the three files plan_slices always scans.
+    required = set(only)
+    if args.size:
+        required |= {"orders", "customers", "order_items"}
+    if not args.benchmarks.exists() and args.size:
+        ap.error(f"benchmarks catalog missing: {args.benchmarks} (run scripts/sync_benchmarks.sh)")
+    for name in required:
         f = args.dataset_dir / COLLECTION_FILES[name]
         if not f.exists():
             ap.error(f"dataset file missing: {f}")
@@ -377,7 +467,8 @@ def main() -> int:
     plan = {}
     if args.size:
         print(f"Planning {args.size} slice from {args.dataset_dir} ...")
-        plan = plan_slices(SIZES[args.size], args.dataset_dir, args.benchmarks, args.full_catalog)
+        plan = plan_slices(SIZES[args.size], args.dataset_dir, args.benchmarks,
+                           args.full_catalog, total_orders=args.total_orders)
         expected = {}
         for name in LOAD_ORDER:
             if name not in only:
@@ -389,12 +480,12 @@ def main() -> int:
             expected[name] = sum(1 for _ in collection_docs(name, args.dataset_dir, plan))
         plan["expected"] = expected
         a = plan["anchors"]
-        print(f"  anchors: {a['order_literals']} order literals, {a['customer_literals']} customer "
-              f"literals ({a['anchor_orders_found']} anchor orders present in data)")
+        print(f"  anchors: {a['order_literals']} order + {a['customer_literals']} customer + "
+              f"{a['item_literals']} item literals resolved "
+              f"({a['phantom_literals']} phantom UUIDs ignored, e.g. store rls_user_ids; "
+              f"{a['anchor_orders_found']} anchor orders present in data)")
 
     if args.dry_run:
-        if not args.size:
-            ap.error("--dry-run requires --size")
         print("\nDry run — would load:")
         total_docs = 0
         for name in LOAD_ORDER:
@@ -423,7 +514,10 @@ def main() -> int:
         return 0
 
     if args.verify_only:
-        return 0 if verify(client, {}, only) else 1
+        # With --size, the planning pass already computed exact expected
+        # counts — use them (a bare --verify-only reports counts without
+        # expectations).
+        return 0 if verify(client, plan.get("expected", {}), only) else 1
 
     started = time.time()
     for name in LOAD_ORDER:

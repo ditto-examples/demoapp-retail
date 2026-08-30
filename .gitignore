@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.template
+.envrc
 
 # macOS
 .DS_Store
@@ -10,17 +11,21 @@
 __pycache__/
 *.pyc
 
-# Android
+# Android / Gradle / Kotlin / IDE
 **/local.properties
 **/.gradle/
+**/.kotlin/
 **/build/
-!vendor/anvil/android/gradle/
+.idea/
+*.iml
 
-# Xcode / Swift
+# Xcode / Swift / SwiftPM
 DerivedData/
 **/Generated/Env.swift
 *.xcuserstate
 xcuserdata/
+.build/
+.swiftpm/
 
 # Flutter
 .dart_tool/

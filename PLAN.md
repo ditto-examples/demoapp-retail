@@ -238,17 +238,20 @@ populated so the store picker always has data to sync.
 
 | Collection | Slice rule |
 |---|---|
-| `orders` | every ⌈100,000/N⌉-th line of `orders-full.ndjson` — a deterministic **stride** that spans the full 2.5-year timeline at every size, with all 8 stores mixed in. At `100k` the stride is 1: the file verbatim. |
+| `orders` | **bucket stride**: line `i` loads iff `floor(i·N/100,000)` increments — exactly N evenly spaced picks spanning the full 2.5-year timeline at every size, all 8 stores mixed in, deterministic. (A naive "every ⌈100k/N⌉-th line" is wrong at 30k — that would pick 25,000.) Plus anchor docs: **N + a handful** of orders/customers/items that benchmark literals reference. |
 | `order_items` | stream `order_items-full.ndjson`, keep rows whose `order_id` ∈ sliced order set |
 | `customers` | union of `customer_id`s referenced by the sliced orders (referential integrity guaranteed; grows naturally with N) **plus the anchor customers below** |
 | `stores`, `categories`, `products`, `inventory` | always in full (8 / 9 / 400 / 3,167 — small, and cross-store stock checks need every store's inventory) |
 
-**Anchor documents are always included**, at every size: the customers, orders
-(and their items) referenced by literal IDs in `benchmarks.json` (e.g. the
+**Anchor documents are always included**, at every size: the customers, orders,
+items (and emails) referenced by literals in `benchmarks.json` (e.g. the
 `customers__select__by_email` customer, the `orders__select__by_id` order, the
-median-selectivity `by_customer` customer). The loader derives the anchor set
-from `shared/benchmarks.json` so the Query Runner's literal queries return
-non-zero, comparable-ish results on every slice.
+`order_items__select__by_id` item — with its parent order pulled in so nothing
+dangles). The loader derives the anchor set from `shared/benchmarks.json`,
+resolving UUID literals by existence-probing the collections they actually
+live in (store `rls_user_id` literals are phantoms and are reported, not
+loaded), so the Query Runner's literal queries return non-zero,
+comparable-ish results on every slice.
 
 At `--size 100k` the customers union rule would silently drop the 458
 customers who never order (review m7) — so **100k special-cases to the full
@@ -577,4 +580,8 @@ Anvil Android modules to the app's AGP 9.3.1 / Kotlin 2.4.10 (the override is
 owned by `vendor_anvil.sh`, never hand-edited); runtime-verified on an
 emulator via exact Anvil token pixel values. Design note from that run:
 Anvil's light-tier brand fill is `neutral950` (near-black); citrus is the
-dark-tier brand fill.*
+dark-tier brand fill. M0 code then passed a second adversarial review
+(1 major — `--verify-only --size` discarded its expected counts; 7 minors —
+all fixed inline) and gained a 44-test suite (`tests/`, stdlib unittest:
+synthetic-fixture unit tests, real-dataset invariant tests that skip when the
+benchmark repo is absent, hermetic shell-script tests).

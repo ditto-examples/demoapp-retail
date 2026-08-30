@@ -382,16 +382,11 @@ def main() -> int:
         for name in LOAD_ORDER:
             if name not in only:
                 continue
-            if name == "orders":
-                expected[name] = len(plan["order_ids"])
-            elif name == "customers":
-                expected[name] = None if plan["all_customers"] else len(plan["customer_ids"])
-                if plan["all_customers"]:
-                    expected[name] = sum(1 for _ in iter_ndjson(args.dataset_dir / COLLECTION_FILES["customers"]))
-            elif name == "order_items":
-                expected[name] = sum(1 for _ in collection_docs("order_items", args.dataset_dir, plan))
-            else:
-                expected[name] = sum(1 for _ in iter_ndjson(args.dataset_dir / COLLECTION_FILES[name]))
+            # Count through the exact upload predicate. (Plan id sets can be a
+            # superset of reality: anchor UUID literals include store
+            # rls_user_ids that never appear in customers.ndjson, so
+            # len(customer_ids) over-counts by the number of phantom anchors.)
+            expected[name] = sum(1 for _ in collection_docs(name, args.dataset_dir, plan))
         plan["expected"] = expected
         a = plan["anchors"]
         print(f"  anchors: {a['order_literals']} order literals, {a['customer_literals']} customer "

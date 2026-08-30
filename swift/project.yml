@@ -40,10 +40,28 @@ targets:
         buildPhase: resources
     dependencies:
       - package: Anvil
+      # DittoSwift ships as a dynamic XCFramework. iOS embeds it implicitly;
+      # macOS needs the post-build embed script below (XcodeGen's package
+      # embed: true mis-resolves the copy source for binary packages).
       - package: DittoSwiftPackage
         product: DittoSwift
       - package: DittoSwiftTools
         product: DittoAllToolsMenu
+    postBuildScripts:
+      - name: Embed DittoSwift.framework (macOS)
+        shell: /bin/sh
+        script: |
+          # Without this the macOS app crashes at launch: dyld can't find
+          # @rpath/DittoSwift.framework (the XCFramework is dynamic).
+          if [ "$PLATFORM_NAME" = "macosx" ]; then
+            SRC="$BUILD_DIR/../../SourcePackages/artifacts/dittoswiftpackage/DittoSwift/DittoSwift.xcframework/macos-arm64/DittoSwift.framework"
+            DST_DIR="$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+            mkdir -p "$DST_DIR"
+            rm -rf "$DST_DIR/DittoSwift.framework"
+            cp -R "$SRC" "$DST_DIR/"
+            # Ad-hoc sign so the framework loads from a locally-signed app.
+            codesign --force --sign - --timestamp=none "$DST_DIR/DittoSwift.framework" 2>/dev/null || true
+          fi
     preBuildScripts:
       - name: Generate Env.swift
         shell: /bin/sh
@@ -73,6 +91,10 @@ targets:
         # Multiplatform: iOS/iPadOS + macOS, one target (ditto-edge-studio pattern).
         SDKROOT: auto
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator macosx"
+        # iOS-style default (@executable_path/Frameworks) isn't enough on
+        # macOS — dyld needs @executable_path/../Frameworks for the embedded
+        # DittoSwift.framework (see the Embed post-build script).
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks"
         TARGETED_DEVICE_FAMILY: "1,2"
         IPHONEOS_DEPLOYMENT_TARGET: "26.0"
         MACOSX_DEPLOYMENT_TARGET: "26.0"

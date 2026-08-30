@@ -336,6 +336,7 @@
 				A3708BF41E3F37B25BB06B78 /* Sources */,
 				877A2AF44A9247A4A84469B8 /* Resources */,
 				B3D8420A4EF638B0A5A725D7 /* Frameworks */,
+				EA425C93DA4C4B29045937AC /* Embed DittoSwift.framework (macOS) */,
 			);
 			buildRules = (
 			);
@@ -483,6 +484,24 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/buildEnv.sh\" \"$SRCROOT/../.env\" \"$SRCROOT/Generated\"\n";
 		};
+		EA425C93DA4C4B29045937AC /* Embed DittoSwift.framework (macOS) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed DittoSwift.framework (macOS)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Without this the macOS app crashes at launch: dyld can't find\n# @rpath/DittoSwift.framework (the XCFramework is dynamic).\nif [ \"$PLATFORM_NAME\" = \"macosx\" ]; then\n  SRC=\"$BUILD_DIR/../../SourcePackages/artifacts/dittoswiftpackage/DittoSwift/DittoSwift.xcframework/macos-arm64/DittoSwift.framework\"\n  DST_DIR=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\n  mkdir -p \"$DST_DIR\"\n  rm -rf \"$DST_DIR/DittoSwift.framework\"\n  cp -R \"$SRC\" \"$DST_DIR/\"\n  # Ad-hoc sign so the framework loads from a locally-signed app.\n  codesign --force --sign - --timestamp=none \"$DST_DIR/DittoSwift.framework\" 2>/dev/null || true\nfi\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -559,10 +578,7 @@
 				INFOPLIST_FILE = ZavaRetail/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;
@@ -695,10 +711,7 @@
 				INFOPLIST_FILE = ZavaRetail/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;

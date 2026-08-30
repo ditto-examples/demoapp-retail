@@ -26,7 +26,7 @@ rsync -a --exclude '.build' "$ANVIL_DIR/swift/Anvil" "$DEST/swift/"
 # The root build.gradle.kts (group/version -> includeBuild substitution),
 # gradle.properties (android.useAndroidX, compileSdk suppression) and the
 # version catalog are all required for the modules to configure (PLAN §5, B1).
-rsync -a --exclude 'build' --exclude 'local.properties' \
+rsync -a --exclude 'build' --exclude 'local.properties' --exclude '.idea' --exclude '.gradle' \
   "$ANVIL_DIR/android/anvil-tokens" "$ANVIL_DIR/android/anvil-material3" "$DEST/android/"
 cp "$ANVIL_DIR/android/build.gradle.kts" "$ANVIL_DIR/android/gradle.properties" "$DEST/android/"
 cp "$ANVIL_DIR/android/gradle/libs.versions.toml" "$DEST/android/gradle/"

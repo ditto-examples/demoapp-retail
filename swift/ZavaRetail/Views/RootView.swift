@@ -1,5 +1,5 @@
-import SwiftUI
 import Anvil
+import SwiftUI
 
 /// Boot gate: loading → missing-config / failure / store picker → main tabs.
 struct RootView: View {
@@ -14,7 +14,7 @@ struct RootView: View {
                     .task { await appState.bootApp() }
             case .missingConfig:
                 MissingConfigView()
-            case .failed(let message):
+            case let .failed(message):
                 ContentUnavailableView(
                     "Ditto failed to start",
                     systemImage: "exclamationmark.triangle",
@@ -29,6 +29,42 @@ struct RootView: View {
             }
         }
         .background(colors.background)
+        // The one global error surface — lastError is always readable by the
+        // user (auth failures, store-switch failures, observer decode drift).
+        .safeAreaInset(edge: .top) {
+            if let message = appState.lastError {
+                ErrorBanner(message: message) {
+                    appState.lastError = nil
+                }
+                .padding()
+            }
+        }
+    }
+}
+
+private struct ErrorBanner: View {
+    let message: String
+    let dismiss: () -> Void
+    @Environment(\.dittoColors) private var colors
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(colors.fillCritical)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(colors.foregroundNormal)
+                .lineLimit(3)
+            Spacer()
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .foregroundStyle(colors.foregroundSubtle)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(colors.fillCriticalSecondary)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -40,8 +76,8 @@ struct MissingConfigView: View {
             systemImage: "key.slash",
             description: Text(
                 "Copy .env.template to .env at the repository root and fill in "
-                + "DITTO_DATABASE_ID, DITTO_DEVELOPMENT_TOKEN, and DITTO_SERVER_URL "
-                + "from the Ditto portal, then rebuild."
+                    + "DITTO_DATABASE_ID, DITTO_DEVELOPMENT_TOKEN, and DITTO_SERVER_URL "
+                    + "from the Ditto portal, then rebuild."
             )
         )
     }

@@ -3,9 +3,8 @@ import XCTest
 /// Query Runner smoke test: browse the bundled benchmark catalog, run a
 /// benchmark against the synced store, see a result count + timings.
 final class QueryRunnerUITests: XCTestCase {
-
     @MainActor
-    func testRunBenchmarkFromCatalog() throws {
+    func testRunBenchmarkFromCatalog() {
         let app = XCUIApplication()
         // Preselect Seattle via the NSUserDefaults argument domain (skips the
         // picker; boot applies the selection and registers per-store subs).
@@ -27,8 +26,10 @@ final class QueryRunnerUITests: XCTestCase {
             app.swipeUp()
             scrolled += 1
         }
-        XCTAssertTrue(entry.waitForExistence(timeout: 10),
-                      "orders__select__by_id should appear after scrolling the catalog")
+        XCTAssertTrue(
+            entry.waitForExistence(timeout: 10),
+            "orders__select__by_id should appear after scrolling the catalog"
+        )
         entry.tap()
 
         // The detail is a ScrollView (query + pre/post blocks) — the Run
@@ -45,10 +46,14 @@ final class QueryRunnerUITests: XCTestCase {
         let resultCount = app.staticTexts
             .matching(NSPredicate(format: "label CONTAINS 'rows'"))
             .firstMatch
-        XCTAssertTrue(resultCount.waitForExistence(timeout: 60),
-                      "the run should report a result count")
-        XCTAssertTrue(resultCount.label.contains("1"),
-                      "orders__select__by_id hits exactly the anchor order (got: \(resultCount.label))")
+        XCTAssertTrue(
+            resultCount.waitForExistence(timeout: 60),
+            "the run should report a result count"
+        )
+        XCTAssertEqual(
+            resultCount.label, "1 rows",
+            "orders__select__by_id hits exactly the anchor order (got: \(resultCount.label))"
+        )
 
         let mean = app.staticTexts["Mean"]
         XCTAssertTrue(mean.waitForExistence(timeout: 10))

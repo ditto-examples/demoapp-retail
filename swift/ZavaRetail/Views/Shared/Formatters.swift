@@ -12,11 +12,6 @@ enum Formatters {
         currency.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
     }
 
-    /// "2025-06-27T18:20:00Z" → "Jun 27, 2025"
-    static func dateOnly(_ iso: String) -> String {
-        String(iso.prefix(10))
-    }
-
     /// "2025-06-27T18:20:00Z" → "Jun 27, 2025 18:20"
     static func dateTime(_ iso: String) -> String {
         guard iso.count >= 16 else { return iso }

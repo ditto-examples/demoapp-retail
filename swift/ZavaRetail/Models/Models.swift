@@ -13,6 +13,7 @@ struct Store: Sendable, Codable, Identifiable, Equatable {
         let state: String
         let zip: String
     }
+
     let _id: String
     let store_id: String
     let store_name: String
@@ -21,7 +22,9 @@ struct Store: Sendable, Codable, Identifiable, Equatable {
     let location: Location
     let deleted: Bool
 
-    var id: String { _id }
+    var id: String {
+        _id
+    }
 }
 
 struct Category: Sendable, Codable, Identifiable, Equatable {
@@ -31,7 +34,9 @@ struct Category: Sendable, Codable, Identifiable, Equatable {
     let seasonal_multipliers: [String: Double]?
     let deleted: Bool
 
-    var id: String { _id }
+    var id: String {
+        _id
+    }
 }
 
 struct Product: Sendable, Codable, Identifiable, Equatable {
@@ -45,7 +50,9 @@ struct Product: Sendable, Codable, Identifiable, Equatable {
     let gross_margin_percent: Double
     let deleted: Bool
 
-    var id: String { _id }
+    var id: String {
+        _id
+    }
 }
 
 struct Customer: Sendable, Codable, Identifiable, Equatable {
@@ -59,8 +66,13 @@ struct Customer: Sendable, Codable, Identifiable, Equatable {
     let created_at: String
     let deleted: Bool
 
-    var id: String { _id }
-    var displayName: String { "\(first_name) \(last_name)" }
+    var id: String {
+        _id
+    }
+
+    var displayName: String {
+        "\(first_name) \(last_name)"
+    }
 }
 
 struct InventoryItem: Sendable, Codable, Identifiable, Equatable {
@@ -68,11 +80,13 @@ struct InventoryItem: Sendable, Codable, Identifiable, Equatable {
         let store_id: String
         let product_id: String
     }
+
     struct BinLocation: Sendable, Codable, Equatable {
         let aisle: String
         let shelf: String
         let bin: String
     }
+
     let _id: CompositeID
     let store_id: String
     let product_id: String
@@ -82,7 +96,9 @@ struct InventoryItem: Sendable, Codable, Identifiable, Equatable {
     let notes: String?
     let deleted: Bool
 
-    var id: String { "\(_id.store_id)|\(_id.product_id)" }
+    var id: String {
+        "\(_id.store_id)|\(_id.product_id)"
+    }
 }
 
 struct Order: Sendable, Codable, Identifiable, Equatable {
@@ -100,7 +116,9 @@ struct Order: Sendable, Codable, Identifiable, Equatable {
     let status: String
     let deleted: Bool
 
-    var id: String { _id }
+    var id: String {
+        _id
+    }
 }
 
 struct OrderItem: Sendable, Codable, Identifiable, Equatable {
@@ -116,7 +134,9 @@ struct OrderItem: Sendable, Codable, Identifiable, Equatable {
     let line_total: Double
     let deleted: Bool
 
-    var id: String { _id }
+    var id: String {
+        _id
+    }
 }
 
 /// Row shape of `system:data_sync_info` (the sync status virtual collection).

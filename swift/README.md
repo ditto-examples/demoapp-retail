@@ -29,24 +29,35 @@ root `.env` (see `../.env.template`). Seed Big Peer first:
 Regenerate the project whenever files are added/removed (no synchronized
 groups): `xcodegen`.
 
-## Tests
+## Tests & quality gates
 
 ```sh
-# unit tests (catalog decode, query preparation, stats, fonts)
-xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:ZavaRetailTests test
-
-# UI tests (live: picker → store → dashboard sync; Query Runner executes
-# orders__select__by_id against the synced store)
-xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:ZavaRetailUITests test
+make test        # unit tests (models, query preparation, stats, orchestration)
+make test-ui     # UI tests against live Big Peer (seed it first)
+make lint        # SwiftLint (fatal build phase; zero-violations baseline)
+make format      # SwiftFormat
+make coverage    # 85% line-coverage gate (unit + UI in one bundle; ~91% now)
+make periphery   # dead-code sweep (informational)
 ```
 
 UI tests need Big Peer seeded and use launch arguments:
 `-resetStoreSelection` (force the picker) or `-selectedStoreId store_seattle`
 (skip it).
+
+## Device builds (signing)
+
+`DEVELOPMENT_TEAM` is intentionally empty in `project.yml` (per-developer).
+Open the project in Xcode and select your team under Signing & Capabilities,
+or export a local override — note that `make setup` (xcodegen) regenerates
+`ZavaRetail.xcodeproj` from `project.yml`, so keep team selection in Xcode's
+local settings or a fork-local `project.yml` edit rather than editing the
+generated project (both the `.xcodeproj` and `project.yml` are committed;
+regenerate-then-commit to avoid drift).
+
+## macOS
+
+The same scheme builds "My Mac" (macOS 26). Fonts register via CoreText at
+launch on macOS (iOS uses the Info.plist `UIAppFonts` key).
 
 ## Where things live
 

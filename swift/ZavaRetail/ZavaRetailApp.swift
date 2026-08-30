@@ -1,5 +1,5 @@
-import SwiftUI
 import Anvil
+import SwiftUI
 
 @main
 struct ZavaRetailApp: App {

@@ -1,5 +1,5 @@
-import SwiftUI
 import Anvil
+import SwiftUI
 
 /// The 72-query benchmark catalog shipped in the app bundle, browsable by
 /// collection. Every query is runnable against the live synced store with
@@ -34,8 +34,11 @@ struct QueryCatalogView: View {
                 }
                 .listStyle(.inset)
             } else if let error {
-                ContentUnavailableView("Catalog unavailable", systemImage: "exclamationmark.triangle",
-                                       description: Text(error))
+                ContentUnavailableView(
+                    "Catalog unavailable",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(error)
+                )
             } else {
                 ProgressView("Loading benchmark catalog…")
             }
@@ -81,16 +84,18 @@ struct QueryDetailView: View {
     @State private var result: BenchmarkRunResult?
     @State private var error: String?
     @State private var showMutationConfirm = false
-    @State private var showResults = false
-    @State private var previewRows: [String]?
+    /// The id suffix the NEXT run will use — shown in the query preview so the
+    /// DQL on screen is exactly the DQL that will execute. Regenerated after
+    /// each run so repeat runs never conflict.
+    @State private var runId = String(UUID().uuidString.prefix(8))
 
-    /// Prepared for the currently selected store (substitutions recompute per
-    /// run so each mutating run gets fresh bench ids).
+    /// Prepared with the same runId the next run will use — the viewer never
+    /// shows a different statement than the one that executes.
     private var prepared: PreparedBenchmark {
         QueryPreparation.prepare(
             name: name, entry: entry,
             storeId: appState.selectedStoreId ?? "store_seattle",
-            runId: "preview"
+            runId: runId
         )
     }
 
@@ -133,7 +138,7 @@ struct QueryDetailView: View {
 
                 AnvilCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Stepper("Iterations: \(iterations)", value: $iterations, in: 1...100)
+                        Stepper("Iterations: \(iterations)", value: $iterations, in: 1 ... 100)
                             .foregroundStyle(colors.foregroundNormal)
                         if isRunning {
                             ProgressView("Running \(iterations) iterations…")
@@ -153,9 +158,13 @@ struct QueryDetailView: View {
                                 resultRow("Median", String(format: "%.2f ms", result.stats.medianMs))
                                 resultRow("p95", String(format: "%.2f ms", result.stats.p95Ms))
                                 resultRow("Min / Max", String(format: "%.2f / %.2f ms", result.stats.minMs, result.stats.maxMs))
-                                Text("\(result.iterations) timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple.")
-                                    .font(.caption)
-                                    .foregroundStyle(colors.foregroundSubtle)
+                                Text("""
+                                \(result.iterations) timed iterations, execution only (no rendering). \
+                                The benchmark harness uses pilot + warmup + 50 iterations; \
+                                this screen keeps it simple.
+                                """)
+                                .font(.caption)
+                                .foregroundStyle(colors.foregroundSubtle)
                             }
                         }
                         if let error {
@@ -172,7 +181,11 @@ struct QueryDetailView: View {
             Button("Run", role: .destructive) { runNow() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This \(entry.category) benchmark writes a synthetic document. On a synced device that write replicates to Big Peer; the runner uses fresh per-run ids and cleans up with a propagating DELETE (not EVICT, which is local-only).")
+            Text("""
+            This \(entry.category) benchmark writes a synthetic document. On a synced device \
+            that write replicates to Big Peer; the runner uses fresh per-run ids and cleans \
+            up with a propagating DELETE (not EVICT, which is local-only).
+            """)
         }
     }
 
@@ -180,16 +193,22 @@ struct QueryDetailView: View {
         isRunning = true
         result = nil
         error = nil
+        let runIdForThisRun = runId
         Task {
             do {
                 let prepared = QueryPreparation.prepare(
                     name: name, entry: entry,
-                    storeId: appState.selectedStoreId ?? "store_seattle"
+                    storeId: appState.selectedStoreId ?? "store_seattle",
+                    runId: runIdForThisRun
                 )
                 result = try await DittoManager.shared.runBenchmark(prepared, iterations: iterations)
+            } catch is CancellationError {
+                // view torn down mid-run — not an error state
             } catch {
                 self.error = error.localizedDescription
             }
+            // Fresh ids for the NEXT run, and the preview shows them.
+            runId = String(UUID().uuidString.prefix(8))
             isRunning = false
         }
     }

@@ -4,9 +4,8 @@ import XCTest
 /// `scripts/load_data.py --size 100k`): store picker shows synced stores,
 /// selecting Seattle lands on a dashboard whose KPIs fill in from sync.
 final class ZavaRetailUITests: XCTestCase {
-
     @MainActor
-    func testStorePickerToDashboard() throws {
+    func testStorePickerToDashboard() {
         let app = XCUIApplication()
         app.launchArguments = ["-resetStoreSelection"]
         app.launch()
@@ -16,8 +15,10 @@ final class ZavaRetailUITests: XCTestCase {
         XCTAssertTrue(pickerNav.waitForExistence(timeout: 60))
 
         let seattle = app.staticTexts["Zava Retail Seattle"]
-        XCTAssertTrue(seattle.waitForExistence(timeout: 120),
-                      "stores collection should sync from Big Peer")
+        XCTAssertTrue(
+            seattle.waitForExistence(timeout: 120),
+            "stores collection should sync from Big Peer"
+        )
         seattle.tap()
 
         // Dashboard with the selected store.
@@ -32,7 +33,10 @@ final class ZavaRetailUITests: XCTestCase {
             Int(kpi.label.replacingOccurrences(of: ",", with: "")) ?? 0 > 0
         }
         let expectation = XCTNSPredicateExpectation(predicate: nonZero, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 300), .completed,
-                       "orders KPI should become non-zero as orders sync")
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: 300),
+            .completed,
+            "orders KPI should become non-zero as orders sync"
+        )
     }
 }

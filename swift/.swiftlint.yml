@@ -1,0 +1,110 @@
+# SwiftLint configuration — Zava Retail (Swift 6, strict concurrency)
+# Zero-violations baseline: this codebase is new, so warnings are real work
+# items, not legacy noise. The Xcode build phase runs this config and fails
+# the build on errors; `make lint-strict` promotes warnings to errors for CI.
+
+included:
+  - ZavaRetail
+  - ZavaRetailTests
+  - ZavaRetailUITests
+
+excluded:
+  - Generated            # buildEnv.sh output (Env.swift)
+  - .build
+  - DerivedData
+  - ZavaRetail.xcodeproj
+
+# Too noisy or delegated to SwiftFormat (the formatting authority).
+disabled_rules:
+  - trailing_whitespace       # SwiftFormat owns whitespace
+  - opening_brace             # SwiftFormat owns brace placement
+  - sorted_imports            # SwiftFormat owns import ordering (they fight: verify before re-enabling)
+  - trailing_comma            # SwiftFormat owns (its trailingCommas rule ADDS them)
+  - cyclomatic_complexity     # UI code
+  - type_body_length          # SwiftUI screens are declarative, not algorithmic
+  - file_length               # ditto
+  - identifier_name           # snake_case model properties mirror the Ditto documents on purpose
+  - todo                      # tracked via todos_fixmes custom rule instead
+
+opt_in_rules:
+  - force_unwrapping
+  - force_cast
+  - unused_optional_binding
+  - unused_setter_value
+  - explicit_init
+  - fatal_error_message
+  - implicit_return
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - unneeded_break_in_switch
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - contains_over_first_not_nil
+  - empty_count
+  - first_where
+  - flatmap_over_map_reduce
+  - last_where
+  - toggle_bool
+  - unavailable_function
+
+line_length:
+  warning: 160    # long DQL strings are intentional and visible
+  error: 240
+
+force_unwrapping:
+  severity: warning   # surfaced, not gated — current count: zero, keep it there
+
+force_cast:
+  severity: warning
+
+function_parameter_count:
+  warning: 6
+  error: 8
+
+nesting:
+  type_level:
+    warning: 3
+
+type_name:
+  min_length: 2
+  max_length:
+    warning: 50
+    error: 60
+
+reporter: "xcode"
+
+custom_rules:
+  # sync.start() may only exist inside DittoManager.startSyncNow (the funnel).
+  # DittoManager.swift is NOT excluded: the one legitimate call site carries an
+  # inline disable, and a rogue call anywhere — including the manager — fails
+  # the build. match_kinds: [identifier] is load-bearing: without it, comments
+  # and string literals mentioning sync.start would be reported.
+  sync_start_choke_point:
+    name: "sync.start() must route through DittoManager.startSyncNow"
+    regex: "sync\\s*\\.\\s*start\\s*\\("
+    match_kinds:
+      - identifier
+    message: "Start sync via DittoManager.startSyncNow (the single funnel)."
+    severity: error
+
+  # All Ditto instances come from DittoManager.open — never construct one in a
+  # view or state class. Same rationale: one access point per app (AGENTS.md).
+  ditto_open_choke_point:
+    name: "Ditto.open must route through DittoManager"
+    regex: "Ditto\\s*\\.\\s*open\\s*\\("
+    match_kinds:
+      - identifier
+    message: "Open Ditto via DittoManager.shared.open (the single access point)."
+    severity: error
+
+  todos_fixmes:
+    name: "TODO and FIXME"
+    regex: "(TODO|FIXME):"
+    message: "TODO or FIXME comment should be resolved"
+    severity: warning
+
+  no_print_statements:
+    name: "No print() statements"
+    regex: "^\\s*print\\("
+    message: "Use os_log Logger (Logger.sync / Logger.ui), not print()"
+    severity: warning

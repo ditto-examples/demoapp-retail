@@ -1,7 +1,7 @@
-import SwiftUI
 import Anvil
 import DittoSwift
 import OSLog
+import SwiftUI
 
 /// Dashboard KPI queries — derived from the benchmark's AGGREGATION entries
 /// (orders__aggregation__sum_total_by_status, orders__aggregation__count_by_month,
@@ -10,48 +10,58 @@ import OSLog
 /// executed is always shown in the card's DQL callout.
 enum DashboardQueries {
     static let statusRevenue = """
-        SELECT status, COUNT(*) AS orders, SUM(total) AS revenue \
-        FROM orders WHERE store_id = :storeId AND deleted = false GROUP BY status
-        """
+    SELECT status, COUNT(*) AS orders, SUM(total) AS revenue \
+    FROM orders WHERE store_id = :storeId AND deleted = false GROUP BY status
+    """
     static let monthlyTrend = """
-        SELECT substr(order_date, 0, 7) AS month, COUNT(*) AS orders, SUM(total) AS revenue \
-        FROM orders WHERE store_id = :storeId AND deleted = false \
-        GROUP BY substr(order_date, 0, 7) ORDER BY substr(order_date, 0, 7) DESC LIMIT 12
-        """
+    SELECT substr(order_date, 0, 7) AS month, COUNT(*) AS orders, SUM(total) AS revenue \
+    FROM orders WHERE store_id = :storeId AND deleted = false \
+    GROUP BY substr(order_date, 0, 7) ORDER BY substr(order_date, 0, 7) DESC LIMIT 12
+    """
+    /// Benchmark-shaped (inventory__select__low_stock): the store predicate
+    /// keeps the KPI correct even if a store switch left stale inventory
+    /// behind (don't rely on the eviction invariant alone).
     static let lowStock = """
-        SELECT COUNT(*) AS count FROM inventory WHERE stock_level < 5 AND deleted = false
-        """
-    // Verbatim order_items__aggregation__top_products_by_revenue (the
-    // benchmark projects ONLY group keys + aggregates — DQL rejects
-    // projecting product_name here: "must depend only on group keys or
-    // aggregates"). The row shows product_id; names resolve client-side
-    // against the shared products catalog if ever needed.
+    SELECT COUNT(*) AS count FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false
+    """
+    /// Verbatim order_items__aggregation__top_products_by_revenue (the
+    /// benchmark projects ONLY group keys + aggregates — DQL rejects
+    /// projecting product_name here: "must depend only on group keys or
+    /// aggregates"). The row shows product_id; names resolve client-side
+    /// against the shared products catalog if ever needed.
     static let topProducts = """
-        SELECT product_id, SUM(line_total) AS revenue \
-        FROM order_items WHERE store_id = :storeId AND deleted = false \
-        GROUP BY product_id ORDER BY revenue DESC LIMIT 5
-        """
+    SELECT product_id, SUM(line_total) AS revenue \
+    FROM order_items WHERE store_id = :storeId AND deleted = false \
+    GROUP BY product_id ORDER BY revenue DESC LIMIT 5
+    """
 }
 
-// Aggregate row models (decoded via the same DittoManager.fetch path).
+/// Aggregate row models (decoded via the same DittoManager.fetch path).
 struct StatusRevenueRow: Sendable, Decodable {
     let status: String
     let orders: Int
     let revenue: Double
 }
+
 struct MonthTrendRow: Sendable, Decodable, Identifiable {
     let month: String
     let orders: Int
     let revenue: Double
-    var id: String { month }
+    var id: String {
+        month
+    }
 }
+
 struct CountRow: Sendable, Decodable {
     let count: Int
 }
+
 struct TopProductRow: Sendable, Decodable, Identifiable {
     let product_id: String
     let revenue: Double
-    var id: String { product_id }
+    var id: String {
+        product_id
+    }
 }
 
 @MainActor
@@ -74,19 +84,28 @@ final class DashboardState {
         defer { isLoading = false }
         do {
             async let status: [StatusRevenueRow] = DittoManager.shared.fetch(
-                DashboardQueries.statusRevenue, arguments: ["storeId": storeId], as: StatusRevenueRow.self)
+                DashboardQueries.statusRevenue, arguments: ["storeId": storeId], as: StatusRevenueRow.self
+            )
             async let months: [MonthTrendRow] = DittoManager.shared.fetch(
-                DashboardQueries.monthlyTrend, arguments: ["storeId": storeId], as: MonthTrendRow.self)
+                DashboardQueries.monthlyTrend, arguments: ["storeId": storeId], as: MonthTrendRow.self
+            )
             async let lowStock: [CountRow] = DittoManager.shared.fetch(
-                DashboardQueries.lowStock, as: CountRow.self)
+                DashboardQueries.lowStock, arguments: ["storeId": storeId], as: CountRow.self
+            )
             async let top: [TopProductRow] = DittoManager.shared.fetch(
-                DashboardQueries.topProducts, arguments: ["storeId": storeId], as: TopProductRow.self)
+                DashboardQueries.topProducts, arguments: ["storeId": storeId], as: TopProductRow.self
+            )
             statusRows = try await status.sorted { $0.orders > $1.orders }
             monthRows = try await months
             lowStockCount = try await lowStock.first?.count
             topProducts = try await top
             loadedFor = storeId
-            Logger.sync.info("dashboard refresh for \(storeId, privacy: .public): \(self.statusRows.count) status rows, \(self.monthRows.count) months, lowStock=\(self.lowStockCount ?? -1), topProducts=\(self.topProducts.count)")
+            let summary = "dashboard refresh for \(storeId): \(statusRows.count) status rows, "
+                + "\(monthRows.count) months, lowStock=\(lowStockCount ?? -1), "
+                + "topProducts=\(topProducts.count)"
+            Logger.sync.info("\(summary, privacy: .public)")
+        } catch is CancellationError {
+            // View torn down mid-refresh — not an error state.
         } catch {
             Logger.sync.error("dashboard refresh failed: \(error.localizedDescription, privacy: .public)")
             self.error = error.localizedDescription
@@ -109,8 +128,13 @@ struct DashboardView: View {
         appState.stores.first { $0.store_id == appState.selectedStoreId }
     }
 
-    private var totalOrders: Int { state.statusRows.reduce(0) { $0 + $1.orders } }
-    private var totalRevenue: Double { state.statusRows.reduce(0) { $0 + $1.revenue } }
+    private var totalOrders: Int {
+        state.statusRows.reduce(0) { $0 + $1.orders }
+    }
+
+    private var totalRevenue: Double {
+        state.statusRows.reduce(0) { $0 + $1.revenue }
+    }
 
     var body: some View {
         NavigationStack {
@@ -165,10 +189,18 @@ struct DashboardView: View {
 
     private var kpiGrid: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-            KpiCard(title: "Orders", value: "\(totalOrders.formatted())",
-                    query: DashboardQueries.statusRevenue, identifier: "kpi.orders")
-            KpiCard(title: "Revenue (all time)", value: Formatters.usd(totalRevenue),
-                    query: DashboardQueries.statusRevenue, identifier: "kpi.revenue")
+            KpiCard(
+                title: "Orders",
+                value: "\(totalOrders.formatted())",
+                query: DashboardQueries.statusRevenue,
+                identifier: "kpi.orders"
+            )
+            KpiCard(
+                title: "Revenue (all time)",
+                value: Formatters.usd(totalRevenue),
+                query: DashboardQueries.statusRevenue,
+                identifier: "kpi.revenue"
+            )
         }
     }
 
@@ -213,8 +245,10 @@ struct DashboardView: View {
                         .font(.headline).foregroundStyle(colors.foregroundNormal)
                     Spacer()
                     if let count = state.lowStockCount {
-                        AnvilBadge("\(count) SKU\(count == 1 ? "" : "s") under 5 units",
-                                   status: count > 0 ? .warning : .success)
+                        AnvilBadge(
+                            "\(count) SKU\(count == 1 ? "" : "s") under 5 units",
+                            status: count > 0 ? .warning : .success
+                        )
                     }
                 }
                 QueryCallout(query: DashboardQueries.lowStock)

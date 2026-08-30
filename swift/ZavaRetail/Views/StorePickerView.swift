@@ -1,5 +1,5 @@
-import SwiftUI
 import Anvil
+import SwiftUI
 
 /// First-launch store picker (also reachable via "Switch store" on the Ditto
 /// tab). The stores arrive over the shared-catalog subscription — if the list

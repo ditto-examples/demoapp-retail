@@ -1,7 +1,7 @@
-import SwiftUI
 import Anvil
-import DittoSwift
 import DittoAllToolsMenu
+import DittoSwift
+import SwiftUI
 
 /// The Ditto tab: Query Runner entry point, live sync status
 /// (system:data_sync_info), indexes (system:indexes), the official Ditto
@@ -49,7 +49,11 @@ struct DittoTabView: View {
                         Label("Switch store", systemImage: "arrow.triangle.swap")
                     }
                 } footer: {
-                    Text("Cancels this store's subscriptions, evicts its local data (EVICT — local only), and lets you pick another store.")
+                    Text("""
+                    Returns to the store picker. The current store keeps syncing until you pick \
+                    a new one — picking it cancels its subscriptions, evicts its local data \
+                    (EVICT — local only), and subscribes to the new store.
+                    """)
                 }
             }
             .navigationTitle("Ditto")
@@ -89,8 +93,7 @@ final class SyncStatusState {
             observer = try await DittoManager.shared.observeRawJSON(Self.query) { [weak self] jsonRows in
                 self?.rows = jsonRows.compactMap { json in
                     guard let data = json.data(using: .utf8),
-                          let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any?]
-                    else { return nil }
+                          let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any?] else { return nil }
                     return SyncStatusInfo(from: dict)
                 }
             }
@@ -112,9 +115,11 @@ struct SyncStatusView: View {
     var body: some View {
         List {
             if state.rows.isEmpty {
-                ContentUnavailableView("No sync sessions yet",
-                                       systemImage: "arrow.triangle.2.circlepath",
-                                       description: Text("Status appears once sync sessions establish."))
+                ContentUnavailableView(
+                    "No sync sessions yet",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    description: Text("Status appears once sync sessions establish.")
+                )
             }
             ForEach(state.rows) { row in
                 VStack(alignment: .leading, spacing: 6) {
@@ -123,10 +128,14 @@ struct SyncStatusView: View {
                         .foregroundStyle(colors.foregroundNormal)
                         .lineLimit(2)
                     HStack(spacing: 8) {
-                        AnvilBadge(row.isDittoServer ? "Big Peer" : "peer",
-                                   status: row.isDittoServer ? .promo : .info)
-                        AnvilBadge(row.syncSessionStatus,
-                                   status: row.syncSessionStatus == "Connected" ? .success : .warning)
+                        AnvilBadge(
+                            row.isDittoServer ? "Big Peer" : "peer",
+                            status: row.isDittoServer ? .promo : .info
+                        )
+                        AnvilBadge(
+                            row.syncSessionStatus,
+                            status: row.syncSessionStatus == "Connected" ? .success : .warning
+                        )
                         if let commit = row.syncedUpToLocalCommitId {
                             Text("commit \(commit)")
                                 .font(.dittoCode(size: 11))
@@ -161,8 +170,7 @@ final class IndexesState {
             observer = try await DittoManager.shared.observeRawJSON(Self.query) { [weak self] jsonRows in
                 self?.rows = jsonRows.compactMap { json in
                     guard let data = json.data(using: .utf8),
-                          let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any?]
-                    else { return nil }
+                          let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any?] else { return nil }
                     return IndexInfo(from: dict)
                 }.sorted { $0.id < $1.id }
             }

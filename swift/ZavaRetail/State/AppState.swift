@@ -1,5 +1,5 @@
-import Foundation
 import DittoSwift
+import Foundation
 import OSLog
 
 /// App-visible diagnostics (os_log — never print(); see repo conventions).
@@ -34,6 +34,7 @@ final class AppState {
             }
         }
     }
+
     var lastError: String?
 
     /// The live Ditto instance (Sendable) — the Tools tab hands it to
@@ -58,7 +59,9 @@ final class AppState {
             return
         }
         do {
+            #if DEBUG
             DittoLogger.minimumLogLevel = .debug
+            #endif
             let instance = try await DittoManager.shared.open(config: config) { [weak self] message in
                 self?.lastError = message
             }
@@ -88,13 +91,17 @@ final class AppState {
 
     /// Store switch showcase (PLAN §4.1): re-points subscriptions and evicts
     /// the old store's data. Called from the store picker and the Ditto tab.
+    /// On failure the UI rolls back to whatever store the manager actually
+    /// serves, and the error surfaces in the banner (never a silent divergence
+    /// between the store name on screen and the synced data).
     func selectStore(_ storeId: String) {
         selectedStoreId = storeId
         Task {
             do {
                 try await DittoManager.shared.applyStoreSelection(storeId)
             } catch {
-                lastError = error.localizedDescription
+                lastError = "Store switch failed: \(error.localizedDescription)"
+                selectedStoreId = await DittoManager.shared.currentStoreId
             }
         }
     }

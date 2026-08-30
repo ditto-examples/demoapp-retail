@@ -1,0 +1,106 @@
+{
+ "store": {
+  "_id": "store_seattle",
+  "store_id": "store_seattle",
+  "store_name": "Zava Retail Seattle",
+  "rls_user_id": "8d7e9536-74a1-4101-967d-7f3103baa401",
+  "is_online": false,
+  "location": {
+   "address": "123 Main St",
+   "city": "Seattle",
+   "state": "WA",
+   "zip": "98101"
+  },
+  "deleted": false
+ },
+ "category": {
+  "_id": "cat_hand_tools",
+  "category_id": "cat_hand_tools",
+  "category_name": "Hand Tools",
+  "seasonal_multipliers": {
+   "jan": 1.0,
+   "feb": 1.0,
+   "mar": 1.1,
+   "apr": 1.2,
+   "may": 1.3,
+   "jun": 1.3,
+   "jul": 1.2,
+   "aug": 1.1,
+   "sep": 1.0,
+   "oct": 1.0,
+   "nov": 1.0,
+   "dec": 1.0
+  },
+  "deleted": false
+ },
+ "product": {
+  "_id": "prod_hnd_0001",
+  "product_id": "prod_hnd_0001",
+  "sku": "HND-0001",
+  "product_name": "HND item 0001",
+  "category_id": "cat_hand_tools",
+  "cost": 36.68,
+  "base_price": 54.75,
+  "gross_margin_percent": 33.0,
+  "specifications": {
+   "weight_lbs": 0.6
+  },
+  "deleted": false
+ },
+ "customer": {
+  "_id": "e652232a-95ab-4fcf-86b7-e40cea3d749d",
+  "customer_id": "e652232a-95ab-4fcf-86b7-e40cea3d749d",
+  "first_name": "Danielle",
+  "last_name": "Johnson",
+  "email": "john21@example.net",
+  "phone": "001-581-896-0013x3890",
+  "primary_store_id": "store_redmond",
+  "created_at": "2023-07-25T00:54:38Z",
+  "deleted": false
+ },
+ "inventory": {
+  "_id": {
+   "store_id": "store_seattle",
+   "product_id": "prod_hnd_0001"
+  },
+  "store_id": "store_seattle",
+  "product_id": "prod_hnd_0001",
+  "stock_level": 25,
+  "location": {
+   "aisle": "4",
+   "shelf": "D",
+   "bin": "20"
+  },
+  "last_counted": "2025-10-10T10:32:00Z",
+  "notes": "",
+  "deleted": false
+ },
+ "order": {
+  "_id": "order_20221209_0001",
+  "order_id": "order_20221209_0001",
+  "customer_id": "fd62516c-84a9-401e-aaae-f1190404ea1a",
+  "store_id": "store_seattle",
+  "order_date": "2022-12-09T18:20:00Z",
+  "customer_name": "Tyler Lopez",
+  "customer_email": "gabriela52@example.org",
+  "store_name": "Zava Retail Seattle",
+  "item_count": 2,
+  "subtotal": 229.11,
+  "total": 250.88,
+  "status": "completed",
+  "deleted": false
+ },
+ "order_item": {
+  "_id": "705d8eda-4606-4551-b505-5d230d38aa8a",
+  "order_id": "order_20221209_0001",
+  "store_id": "store_seattle",
+  "product_id": "prod_hnd_0038",
+  "sku": "HND-0038",
+  "product_name": "HND item 0038",
+  "quantity": 3,
+  "unit_price": 55.87,
+  "discount_percent": 0,
+  "line_total": 167.61,
+  "deleted": false
+ }
+}

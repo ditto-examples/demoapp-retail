@@ -1,6 +1,7 @@
-import SwiftUI
 import Anvil
 import DittoSwift
+import OSLog
+import SwiftUI
 
 /// The orders list is a live store observer (PLAN §4.2.2). The "recent"
 /// filter anchors to max(order_date) in the local store — the dataset ends
@@ -14,25 +15,41 @@ final class OrdersState {
     var error: String?
 
     private var observer: DittoStoreObserver?
-    private var observingKey: String?
+    /// Restart serialization: every restart cancels and awaits the in-flight
+    /// one, so rapid filter changes can't leave two observers alive (M7).
+    private var restartTask: Task<Void, Never>?
 
     private struct MaxDateRow: Sendable, Decodable {
         let max_date: String?
     }
 
     static let baseQuery = """
-        SELECT * FROM orders WHERE store_id = :storeId AND deleted = false
-        """
+    SELECT * FROM orders WHERE store_id = :storeId AND deleted = false
+    """
 
-    func restart(appState: AppState) async {
-        stop()
+    /// Non-blocking restart entry point for view events: serializes against
+    /// any in-flight restart so two rapid changes can't interleave.
+    func restart(appState: AppState) {
+        let previous = restartTask
+        restartTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await restartNow(appState: appState)
+        }
+    }
+
+    private func restartNow(appState: AppState) async {
+        // Not stop(): stop() also cancels restartTask — which is US.
+        observer?.cancel()
+        observer = nil
         guard let storeId = appState.selectedStoreId else { return }
 
         var query = Self.baseQuery
         var arguments: [String: Sendable] = ["storeId": storeId]
         if recentOnly,
            let maxDate = await latestOrderDate(storeId: storeId),
-           let cutoff = cutoffDate(from: maxDate, days: 30) {
+           let cutoff = Self.cutoffDate(from: maxDate, days: 30)
+        {
             query += " AND order_date > :cutoff"
             arguments["cutoff"] = cutoff
         }
@@ -40,11 +57,12 @@ final class OrdersState {
         query += " ORDER BY order_date DESC LIMIT \(limit)"
 
         do {
-            let startedWith = query
             observer = try await DittoManager.shared.observe(query, arguments: arguments, as: Order.self) { [weak self] orders in
                 self?.orders = orders
             }
-            observingKey = "\(storeId)|\(recentOnly)|\(limit)|\(startedWith)"
+            error = nil
+        } catch is CancellationError {
+            // View torn down mid-restart — not an error state.
         } catch {
             self.error = error.localizedDescription
         }
@@ -53,31 +71,30 @@ final class OrdersState {
     func stop() {
         observer?.cancel()
         observer = nil
-        observingKey = nil
-    }
-
-    func syncIfNeeded(appState: AppState) async {
-        let key = "\(appState.selectedStoreId ?? "none")|\(recentOnly)|\(limit)"
-        if observingKey?.hasPrefix(key) != true {
-            await restart(appState: appState)
-        }
+        restartTask?.cancel()
+        restartTask = nil
     }
 
     private func latestOrderDate(storeId: String) async -> String? {
         let query = """
-            SELECT MAX(order_date) AS max_date FROM orders \
-            WHERE store_id = :storeId AND deleted = false
-            """
-        return try? await DittoManager.shared.fetch(query, arguments: ["storeId": storeId], as: MaxDateRow.self)
-            .first?.max_date
+        SELECT MAX(order_date) AS max_date FROM orders \
+        WHERE store_id = :storeId AND deleted = false
+        """
+        do {
+            return try await DittoManager.shared.fetch(query, arguments: ["storeId": storeId], as: MaxDateRow.self)
+                .first?.max_date
+        } catch {
+            Logger.ui.error("latestOrderDate failed — 'recent' shows the full list: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     /// ISO8601 strings sort lexicographically; the cutoff keeps that property.
-    private func cutoffDate(from iso: String, days: Int) -> String? {
+    /// `nonisolated static` and internal so unit tests can reach it.
+    nonisolated static func cutoffDate(from iso: String, days: Int) -> String? {
         let formatter = ISO8601DateFormatter()
         guard let date = formatter.date(from: iso),
-              let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: date)
-        else { return nil }
+              let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: date) else { return nil }
         return formatter.string(from: cutoff)
     }
 }
@@ -127,16 +144,16 @@ struct OrdersView: View {
                     }
                 }
             }
-            .task { await state.restart(appState: appState) }
+            .task { state.restart(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in
-                Task { await state.restart(appState: appState) }
+                state.restart(appState: appState)
             }
             .onChange(of: state.recentOnly) { _, _ in
-                Task { await state.restart(appState: appState) }
+                state.restart(appState: appState)
             }
             .onChange(of: state.limit) { _, _ in
-                Task { await state.restart(appState: appState) }
+                state.restart(appState: appState)
             }
         }
     }

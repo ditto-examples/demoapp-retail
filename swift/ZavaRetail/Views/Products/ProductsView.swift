@@ -1,6 +1,6 @@
-import SwiftUI
 import Anvil
 import DittoSwift
+import SwiftUI
 
 /// Products catalog (shared) joined in-memory with this store's inventory
 /// (per-store subscription) for stock badges — the composite-_id teaching
@@ -25,12 +25,12 @@ final class ProductsState {
 
     static let productsQuery = "SELECT * FROM products WHERE deleted = false ORDER BY product_name"
     static let productsByCategoryQuery = """
-        SELECT * FROM products WHERE category_id = :categoryId AND deleted = false ORDER BY product_name
-        """
+    SELECT * FROM products WHERE category_id = :categoryId AND deleted = false ORDER BY product_name
+    """
     static let searchQuery = """
-        SELECT * FROM products WHERE deleted = false \
-        AND (sku = :term OR product_name LIKE :like) ORDER BY product_name LIMIT 50
-        """
+    SELECT * FROM products WHERE deleted = false \
+    AND (sku = :term OR product_name LIKE :like) ORDER BY product_name LIMIT 50
+    """
 
     func start(appState: AppState) async {
         guard startedFor == nil else { return }
@@ -49,6 +49,8 @@ final class ProductsState {
                 self?.stockByProduct = Dictionary(uniqueKeysWithValues: items.map { ($0.product_id, $0) })
             }
             await reloadProducts()
+        } catch is CancellationError {
+            // View torn down mid-start — not an error state.
         } catch {
             self.error = error.localizedDescription
         }
@@ -70,6 +72,11 @@ final class ProductsState {
     }
 
     func reloadProducts() async {
+        // Cancel the previous products observer FIRST — observers stay live
+        // until cancelled, and an overwritten (non-cancelled) observer keeps
+        // writing stale category results into `products` during sync storms.
+        productsObserver?.cancel()
+        productsObserver = nil
         do {
             if let categoryId = selectedCategoryId {
                 productsObserver = try await DittoManager.shared.observe(
@@ -86,6 +93,8 @@ final class ProductsState {
                     self?.products = products
                 }
             }
+            error = nil
+        } catch is CancellationError {
         } catch {
             self.error = error.localizedDescription
         }
@@ -110,6 +119,7 @@ final class ProductsState {
                     as: Product.self
                 )
                 self?.searchResults = results
+            } catch is CancellationError {
             } catch {
                 self?.error = error.localizedDescription
             }
@@ -143,8 +153,10 @@ struct ProductsView: View {
                             product: product,
                             stock: state.stockByProduct[product.product_id]
                         )) {
-                            ProductRow(product: product,
-                                       stock: state.stockByProduct[product.product_id])
+                            ProductRow(
+                                product: product,
+                                stock: state.stockByProduct[product.product_id]
+                            )
                         }
                     }
                     .listStyle(.plain)
@@ -258,9 +270,9 @@ struct ProductDetailView: View {
     @Environment(\.dittoColors) private var colors
 
     static let locationQuery = """
-        SELECT * FROM inventory \
-        WHERE _id.store_id = :storeId AND _id.product_id = :productId AND deleted = false
-        """
+    SELECT * FROM inventory \
+    WHERE _id.store_id = :storeId AND _id.product_id = :productId AND deleted = false
+    """
 
     var body: some View {
         ScrollView {
@@ -290,8 +302,10 @@ struct ProductDetailView: View {
                             .font(.headline).foregroundStyle(colors.foregroundNormal)
                         if let stock {
                             HStack {
-                                AnvilBadge("\(stock.stock_level) units",
-                                           status: stock.stock_level < 5 ? .warning : .success)
+                                AnvilBadge(
+                                    "\(stock.stock_level) units",
+                                    status: stock.stock_level < 5 ? .warning : .success
+                                )
                                 Spacer()
                                 Text("Aisle \(stock.location.aisle) · Shelf \(stock.location.shelf) · Bin \(stock.location.bin)")
                                     .font(.dittoCode(size: 13))

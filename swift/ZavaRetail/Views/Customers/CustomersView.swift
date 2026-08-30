@@ -1,6 +1,6 @@
-import SwiftUI
 import Anvil
 import DittoSwift
+import SwiftUI
 
 /// The full 25K-row customer directory, synced unfiltered
 /// (subscription__customers_all — a walk-in could be anyone). The list is a
@@ -19,15 +19,15 @@ final class CustomersState {
     private var started = false
 
     static let directoryQuery = """
-        SELECT * FROM customers WHERE deleted = false ORDER BY last_name, first_name
-        """
+    SELECT * FROM customers WHERE deleted = false ORDER BY last_name, first_name
+    """
     /// customers__select__by_email_* — the benchmark's indexed/no-index pair
     /// is runnable side-by-side in the Query Runner tab.
     static let emailQuery = "SELECT * FROM customers WHERE email = :email AND deleted = false"
     static let nameQuery = """
-        SELECT * FROM customers WHERE deleted = false \
-        AND (first_name LIKE :like OR last_name LIKE :like) ORDER BY last_name LIMIT 50
-        """
+    SELECT * FROM customers WHERE deleted = false \
+    AND (first_name LIKE :like OR last_name LIKE :like) ORDER BY last_name LIMIT 50
+    """
 
     func start(appState: AppState) async {
         guard !started else { return }
@@ -36,6 +36,7 @@ final class CustomersState {
             observer = try await DittoManager.shared.observe(Self.directoryQuery, as: Customer.self) { [weak self] customers in
                 self?.customers = customers
             }
+        } catch is CancellationError {
         } catch {
             self.error = error.localizedDescription
         }
@@ -61,11 +62,14 @@ final class CustomersState {
                 if term.contains("@") {
                     // exact-email lookup — the benchmark's indexed pair member
                     self?.searchResults = try await DittoManager.shared.fetch(
-                        Self.emailQuery, arguments: ["email": term], as: Customer.self)
+                        Self.emailQuery, arguments: ["email": term], as: Customer.self
+                    )
                 } else {
                     self?.searchResults = try await DittoManager.shared.fetch(
-                        Self.nameQuery, arguments: ["like": "\(term)%"], as: Customer.self)
+                        Self.nameQuery, arguments: ["like": "\(term)%"], as: Customer.self
+                    )
                 }
+            } catch is CancellationError {
             } catch {
                 self?.error = error.localizedDescription
             }
@@ -87,6 +91,7 @@ struct CustomersView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                let visible = state.visibleCustomers(appState: appState)
                 VStack(spacing: 10) {
                     AnvilInput(placeholder: "Search name, or exact email…", text: $state.searchText)
                     HStack {
@@ -98,7 +103,7 @@ struct CustomersView: View {
                         .toggleStyle(.switch)
                         .fixedSize()
                         Spacer()
-                        Text("\(state.visibleCustomers(appState: appState).count.formatted()) customers")
+                        Text("\(visible.count.formatted()) customers")
                             .font(.dittoCode(size: 12))
                             .foregroundStyle(colors.foregroundSubtle)
                     }
@@ -106,14 +111,13 @@ struct CustomersView: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
 
-                let visible = state.visibleCustomers(appState: appState)
                 if visible.isEmpty {
                     Spacer()
                     VStack(spacing: 12) {
                         ProgressView()
                         Text(state.searchText.isEmpty
-                             ? "Syncing the customer directory…"
-                             : "No matches")
+                            ? "Syncing the customer directory…"
+                            : "No matches")
                             .foregroundStyle(colors.foregroundSubtle)
                         if let error = state.error {
                             AnvilBadge(error, status: .critical)

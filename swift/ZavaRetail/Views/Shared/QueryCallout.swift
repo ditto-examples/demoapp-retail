@@ -1,5 +1,5 @@
-import SwiftUI
 import Anvil
+import SwiftUI
 
 /// The teaching touch: a tappable disclosure that shows the exact DQL a
 /// screen element just ran, in IBM Plex Mono. These apps teach the SDK, so

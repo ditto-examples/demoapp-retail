@@ -53,6 +53,17 @@ targets:
           - $(SRCROOT)/../.env
         outputFiles:
           - $(SRCROOT)/Generated/Env.swift
+      # Fatal lint gate (zero-violations baseline — the codebase is new, so
+      # warnings are work items). DISABLED RULES/notes live in .swiftlint.yml.
+      - name: SwiftLint
+        shell: /bin/sh
+        script: |
+          if command -v swiftlint >/dev/null; then
+            cd "$SRCROOT" && swiftlint lint --config .swiftlint.yml
+          else
+            echo "error: SwiftLint is required (brew install swiftlint)" && exit 1
+          fi
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: live.ditto.zava
@@ -72,7 +83,10 @@ targets:
         INFOPLIST_FILE: ZavaRetail/Info.plist
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        # NO because the SwiftLint build phase reads the whole source tree
+        # (sandbox grants only declared paths). The Env phase keeps declared
+        # input/output files, so it stays sandbox-correct regardless.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
 
@@ -116,6 +130,7 @@ schemes:
       targets:
         ZavaRetail: all
     test:
+      gatherCoverageData: true
       targets:
         - ZavaRetailTests
         - ZavaRetailUITests

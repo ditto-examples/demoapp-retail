@@ -18,7 +18,9 @@ struct BenchmarkCatalog: Sendable {
     let entries: [(name: String, entry: BenchmarkEntry)]
 
     /// Grouped as (collection, [(name, entry)]) in stable order.
-    var groups: [(collection: String, entries: [(name: String, entry: BenchmarkEntry)])] {
+    typealias Group = (collection: String, entries: [(name: String, entry: BenchmarkEntry)])
+
+    var groups: [Group] {
         var byCollection: [String: [(name: String, entry: BenchmarkEntry)]] = [:]
         for item in entries {
             let collection = item.name.split(separator: "__").first.map(String.init) ?? "other"
@@ -42,8 +44,8 @@ struct BenchmarkCatalog: Sendable {
 /// A benchmark after the substitutions a synced, store-scoped demo device
 /// needs (PLAN §4.2.6):
 /// - the literal 'store_seattle' becomes the user's selected store
-/// - mutating benchmarks get per-run unique bench ids (repeat runs can never
-///   hit identifier conflicts, even if a previous run left residue)
+/// - mutating benchmarks get per-run unique bench ids (repeat runs can never hit
+///   identifier conflicts, even if a previous run left residue)
 /// - cleanup EVICT becomes DELETE (EVICT is local-only — on a synced mesh the
 ///   synthetic doc would otherwise stay on Big Peer and re-sync everywhere)
 struct PreparedBenchmark: Sendable {
@@ -65,12 +67,20 @@ enum QueryPreparation {
         runId: String = String(UUID().uuidString.prefix(8))
     ) -> PreparedBenchmark {
         var notes: [String] = []
-        var appliedRunId = ""
+        // The storeId originates from synced stores documents and flows into
+        // DQL as a string literal — enforce the dataset's id invariant
+        // (lowercase/digits/underscore/dash) so a hostile or corrupted store
+        // doc can't inject DQL. DittoManager.applyStoreSelection enforces the
+        // same invariant for the app's own subscriptions.
+        let safeStoreId = DittoManager.isValidStoreId(storeId) ? storeId : "store_seattle"
+        if safeStoreId != storeId {
+            notes.append("Selected store id '\(storeId)' doesn't match the dataset id pattern — substitution skipped.")
+        }
 
         func transform(_ text: String) -> String {
             var result = text
-            if result.contains("store_seattle"), storeId != "store_seattle" {
-                result = result.replacingOccurrences(of: "store_seattle", with: storeId)
+            if result.contains("store_seattle"), safeStoreId != "store_seattle" {
+                result = result.replacingOccurrences(of: "store_seattle", with: safeStoreId)
             }
             if entry.isMutating {
                 result = result.replacingOccurrences(of: "bench-", with: "bench-\(runId)-")
@@ -79,38 +89,15 @@ enum QueryPreparation {
         }
 
         if entry.isMutating {
-            appliedRunId = runId
-            notes.append("Synthetic bench ids got the per-run suffix \(runId), so repeat runs can’t conflict — even if a previous run left residue on the mesh.")
+            notes.append("""
+            Synthetic bench ids got the per-run suffix \(runId), so repeat runs \
+            can’t conflict — even if a previous run left residue on the mesh.
+            """)
         }
 
-        var post = (entry.postQueries ?? []).map { text -> String in
-            var result = transform(text)
-            if entry.isMutating, result.hasPrefix("EVICT ") {
-                result = "DELETE " + result.dropFirst("EVICT ".count)
-            }
-            return result
-        }
-        if entry.isMutating, (entry.postQueries ?? []).contains(where: { $0.hasPrefix("EVICT ") }) {
-            notes.append("Cleanup ran as DELETE instead of the benchmark’s EVICT — EVICT is local-only and the synthetic doc would otherwise stay on Big Peer and re-sync to every device.")
-        }
+        let post = buildPostQueries(entry: entry, transform: transform, notes: &notes)
 
-        // EVICT benchmarks have no cleanup of their own (local removal IS the
-        // operation being measured) — on a synced device we add a propagating
-        // DELETE so the mesh ends clean.
-        if entry.category == "EVICT",
-           let idRange = entry.query.range(of: #"_id\s*=\s*'[^']+'"#, options: .regularExpression) {
-            let collection = entry.query
-                .replacingOccurrences(of: "EVICT FROM ", with: "")
-                .split(separator: " ").first.map(String.init) ?? ""
-            if !collection.isEmpty {
-                // transform() applies the per-run bench-id suffix.
-                let predicate = transform(String(entry.query[idRange]))
-                post.append("DELETE FROM \(collection) WHERE \(predicate)")
-                notes.append("Added a propagating DELETE after the EVICT — otherwise the doc stays on the server and re-syncs.")
-            }
-        }
-
-        if entry.query.contains("store_seattle") && storeId != "store_seattle" {
+        if entry.query.contains("store_seattle") && safeStoreId != "store_seattle" {
             notes.append("The benchmark literal store_seattle was substituted with your selected store (\(storeId)) — visible in the query text below.")
         }
 
@@ -123,6 +110,70 @@ enum QueryPreparation {
             postQueries: post,
             substitutions: notes
         )
+    }
+
+    /// Post-queries with the mutation-safety rewrites applied (EVICT cleanup
+    /// becomes a propagating DELETE; EVICT benchmarks get one appended).
+    private static func buildPostQueries(
+        entry: BenchmarkEntry,
+        transform: (String) -> String,
+        notes: inout [String]
+    ) -> [String] {
+        var post = (entry.postQueries ?? []).map { text -> String in
+            var result = transform(text)
+            if entry.isMutating, result.hasPrefix("EVICT ") {
+                result = "DELETE " + result.dropFirst("EVICT ".count)
+            }
+            return result
+        }
+        if entry.isMutating, (entry.postQueries ?? []).contains(where: { $0.hasPrefix("EVICT ") }) {
+            notes.append("""
+            Cleanup ran as DELETE instead of the benchmark’s EVICT — EVICT is \
+            local-only and the synthetic doc would otherwise stay on Big Peer and \
+            re-sync to every device.
+            """)
+        }
+
+        // EVICT benchmarks have no cleanup of their own (local removal IS the
+        // operation being measured) — on a synced device we add a propagating
+        // DELETE so the mesh ends clean. Failure to derive one is LOUD.
+        if entry.category == "EVICT" {
+            if let cleanup = evictCleanup(entry: entry, transform: transform) {
+                post.append(cleanup)
+                notes.append("Added a propagating DELETE after the EVICT — otherwise the doc stays on the server and re-syncs.")
+            } else {
+                notes.append("WARNING: could not derive a cleanup DELETE for this EVICT — the synthetic doc may stay on Big Peer and re-sync to other devices.")
+            }
+        }
+        return post
+    }
+
+    /// For EVICT entries: the propagating cleanup DELETE appended after the
+    /// run (EVICT is local-only; without this the synthetic doc stays on Big
+    /// Peer and re-syncs everywhere). Handles both scalar and composite
+    /// (object-literal) `_id` targets. Nil for non-EVICT entries or when the
+    /// target can't be extracted — the caller surfaces that loudly.
+    static func evictCleanup(
+        entry: BenchmarkEntry,
+        transform: (String) -> String
+    ) -> String? {
+        guard entry.category == "EVICT" else { return nil }
+        // Scalar `_id = '...'` or composite `_id = {'k': 'v', ...}`.
+        guard let idRange = entry.query.range(
+            of: #"_id\s*=\s*(\{[^}]+\}|'[^']+')"#,
+            options: .regularExpression
+        ) else { return nil }
+        guard let collectionRange = entry.query.range(
+            of: #"EVICT\s+FROM\s+\w+"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) else { return nil }
+        let collection = entry.query[collectionRange]
+            .replacingOccurrences(of: "EVICT FROM ", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespaces)
+        guard !collection.isEmpty else { return nil }
+        // transform() applies the per-run bench-id suffix.
+        let predicate = transform(String(entry.query[idRange]))
+        return "DELETE FROM \(collection) WHERE \(predicate)"
     }
 }
 

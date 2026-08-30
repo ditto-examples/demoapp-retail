@@ -1,12 +1,11 @@
-import XCTest
 import UIKit
+import XCTest
 @testable import ZavaRetail
 
 /// Smoke-level unit tests for the SwiftUI reference app (PLAN §6 plumbing
 /// checklist): the pure, decision-bearing code — benchmark catalog decoding,
 /// store/bench-id substitution, timing stats, and font registration.
 final class ZavaRetailTests: XCTestCase {
-
     // MARK: - Benchmark catalog
 
     func testBenchmarkCatalogLoadsAndGroups() throws {
@@ -20,8 +19,12 @@ final class ZavaRetailTests: XCTestCase {
 
     // MARK: - QueryPreparation
 
-    private func entry(_ query: String, category: String = "SELECT",
-                       pre: [String]? = nil, post: [String]? = nil) -> BenchmarkEntry {
+    private func entry(
+        _ query: String,
+        category: String = "SELECT",
+        pre: [String]? = nil,
+        post: [String]? = nil
+    ) -> BenchmarkEntry {
         BenchmarkEntry(query: query, category: category, preQueries: pre, postQueries: post)
     }
 
@@ -48,11 +51,15 @@ final class ZavaRetailTests: XCTestCase {
         )
         let prepared = QueryPreparation.prepare(name: "t", entry: e, storeId: "store_seattle", runId: "run42")
         XCTAssertTrue(prepared.isMutating)
-        XCTAssertTrue(prepared.query.contains("bench-run42-cust-insert-uuid"),
-                      "bench ids get the per-run suffix: \(prepared.query)")
+        XCTAssertTrue(
+            prepared.query.contains("bench-run42-cust-insert-uuid"),
+            "bench ids get the per-run suffix: \(prepared.query)"
+        )
         // EVICT cleanup rewritten to propagating DELETE, id rewritten too
-        XCTAssertEqual(prepared.postQueries,
-                       ["DELETE FROM customers WHERE _id = 'bench-run42-cust-insert-uuid'"])
+        XCTAssertEqual(
+            prepared.postQueries,
+            ["DELETE FROM customers WHERE _id = 'bench-run42-cust-insert-uuid'"]
+        )
     }
 
     func testEvictBenchmarkGetsPropagatingCleanupAppended() {
@@ -62,8 +69,10 @@ final class ZavaRetailTests: XCTestCase {
             pre: ["INSERT INTO customers DOCUMENTS(deserialize_json('{\"_id\":\"bench-cust-evict-uuid\"}'))"]
         )
         let prepared = QueryPreparation.prepare(name: "t", entry: e, storeId: "store_seattle", runId: "run7")
-        XCTAssertEqual(prepared.postQueries,
-                       ["DELETE FROM customers WHERE _id = 'bench-run7-cust-evict-uuid'"])
+        XCTAssertEqual(
+            prepared.postQueries,
+            ["DELETE FROM customers WHERE _id = 'bench-run7-cust-evict-uuid'"]
+        )
     }
 
     func testReadOnlyBenchmarksAreUntouched() {
@@ -94,11 +103,13 @@ final class ZavaRetailTests: XCTestCase {
 
     // MARK: - Fonts (vendored Anvil fonts must resolve — M1 checkpoint)
 
-    func testAnvilFontsRegistered() throws {
+    func testAnvilFontsRegistered() {
         // Hosted unit test: Bundle.main is the app bundle.
         for resource in ["inter_regular", "ibm_plex_mono_regular", "ibm_plex_mono_bold", "ibm_plex_mono_italic"] {
-            XCTAssertNotNil(Bundle.main.url(forResource: resource, withExtension: "ttf"),
-                            "\(resource).ttf must be a bundled resource")
+            XCTAssertNotNil(
+                Bundle.main.url(forResource: resource, withExtension: "ttf"),
+                "\(resource).ttf must be a bundled resource"
+            )
         }
         FontRegistration.registerAnvilFonts()
         XCTAssertNotNil(UIFont(name: "Inter", size: 12), "Inter (PostScript name) must resolve")

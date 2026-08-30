@@ -507,7 +507,7 @@ tracked as a follow-up task.
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | Scaffold + loader + **build spikes** | git init + branch, `.env.template`, Anvil vendored; **spike 1 ✅ (2026-08-30):** hello-world Compose app consumes vendored Anvil via `includeBuild` under Gradle 9.7 — required re-pinning vendored Anvil to AGP 9.3.1/Kotlin 2.4.10 (scripted in `vendor_anvil.sh`), runtime pixel-verified on emulator; **spike 2 ✅ (2026-08-30):** 500-doc batches accepted by Big Peer, zero retries; `--size 1k` end-to-end green (all counts exact), idempotent re-run confirmed, `--clear` wipes to zero, `--size 100k` soak = 328,341 docs verified in ~20 s of upload |
-| M1 | **SwiftUI reference app** | **Spike 3 first:** one `@Sendable` observer + one `execute` call compiling clean under Swift 6 strict; then all 7 screens + store switch + query runner, Anvil-styled, Inter weight differentiation visually verified, running on device against 100k |
+| M1 | **SwiftUI reference app** ✅ (2026-08-30) | Spike 3 passed (edge-studio patterns compile clean under Swift 6 strict, zero warnings, iOS **and** macOS 26); all screens + store switch + Query Runner; verified end-to-end by UI tests against the live 100k dataset (picker→Seattle→dashboard KPIs sync in; runner executes `orders__select__by_id` → exactly 1 row) + Anvil token pixel-verification in light and dark tiers + 9 unit tests. One real bug caught by testing: DQL GROUP BY projections must be group keys/aggregates only (dropped `product_name` from the top-products card — now verbatim benchmark) |
 | M2 | Android port | Feature/UX parity with M1, composite-build Anvil, tablet rail/detail layouts |
 | M3 | Flutter port | Feature/UX parity; **gate:** `ditto_live` 5.1.x + `ditto_flutter_tools` verified on Flutter 3.41+ (Ditto's documented ceiling is 3.38+) |
 | M4 | RN/Expo port | Feature/UX parity, dev-client builds; **gate:** `@dittolive/ditto` 5.1.x + tools' native peers verified on Expo 57's RN/React |
@@ -554,9 +554,9 @@ reference, not redesigns.
   seeded purely through the HTTP API. Simpler story, fewer moving parts.
 - **Anvil drift**: vendored snapshot can go stale; `vendor_anvil.sh` +
   `vendor/anvil/COMMIT` make refreshing a one-liner until packages publish.
-- **iOS min version**: Anvil Swift's floor is iOS 16; we target iOS 17 for
-  `@Observable` (mflix actually deploys at 18.5 — 17 is our deliberate floor,
-  not an inherited one).
+- **iOS min version**: Anvil Swift's floor is iOS 16; we target **iOS 26**
+  (user requirement: current-OS-only demo apps; also unlocks the modern `Tab`
+  API). The SwiftUI app is iPhone + iPad (`TARGETED_DEVICE_FAMILY = 1,2`).
 - **Verification gates carried in milestones** (cannot be settled without
   building): composite-build toolchain skew (M0 spike 1), HTTP batch
   acceptance (M0 spike 2), Swift 6 pattern port (M1 spike 3 — de-risked by

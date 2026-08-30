@@ -33,6 +33,9 @@ answers.
 | Re-sync benchmark catalog | `scripts/sync_benchmarks.sh` |
 | Run tests | `python3 -m unittest discover -s tests -v` |
 | Android build | `cd android && ./gradlew :app:assembleDebug` |
+| Swift project regen | `cd swift && make setup` (buildEnv.sh + xcodegen) |
+| Swift build (iOS sim) | `cd swift && xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` |
+| Swift tests | same + `-only-testing:ZavaRetailTests test` / `-only-testing:ZavaRetailUITests test` |
 
 ## Dataset
 

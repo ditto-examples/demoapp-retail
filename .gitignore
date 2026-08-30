@@ -1,0 +1,31 @@
+# Credentials — never commit. Template stays tracked.
+.env
+.env.*
+!.env.template
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Android
+**/local.properties
+**/.gradle/
+**/build/
+!vendor/anvil/android/gradle/
+
+# Xcode / Swift
+DerivedData/
+**/Generated/Env.swift
+*.xcuserstate
+xcuserdata/
+
+# Flutter
+.dart_tool/
+flutter/pubspec.lock
+
+# React Native / Node
+node_modules/
+.expo/

@@ -29,10 +29,11 @@ final class TabTourUITests: XCTestCase {
             "revenue KPI wrapped to multiple lines (frame height \(revenue.frame.height))"
         )
 
-        // --- Orders: list renders, detail shows the two-query line items ---
+        // --- Orders: LIKE search narrows the list by partial order number ---
         app.tabBars.buttons["Orders"].tap()
         let ordersTable = app.collectionViews.firstMatch
         XCTAssertTrue(ordersTable.waitForExistence(timeout: 60))
+        assertOrdersSearch(app: app)
         let firstOrderCell = ordersTable.cells.firstMatch
         XCTAssertTrue(
             firstOrderCell.waitForExistence(timeout: 120),
@@ -55,7 +56,7 @@ final class TabTourUITests: XCTestCase {
         // --- Customers: directory renders; exact-email search finds the
         //     benchmark's anchor customer (proves 25K-directory sync) ---
         app.tabBars.buttons["Customers"].tap()
-        let search = app.textFields["Search name, or exact email…"]
+        let search = app.searchFields["Search name, or exact email…"]
         XCTAssertTrue(search.waitForExistence(timeout: 30))
         search.tap()
         search.typeText("john21@example.net")
@@ -66,11 +67,41 @@ final class TabTourUITests: XCTestCase {
         )
 
         // Dismiss the software keyboard — it covers the tab bar otherwise.
+        // The .searchable field's keyboard has a "Search" key, not "return".
         if app.keyboards.element.exists {
-            app.keyboards.buttons["return"].tap()
+            let searchKey = app.keyboards.buttons["Search"]
+            let returnKey = app.keyboards.buttons["return"]
+            (searchKey.exists ? searchKey : returnKey).tap()
         }
 
         tourDittoTab(app: app)
+    }
+
+    /// Orders search: the standard .searchable field narrows the paged list via
+    /// ILIKE on a partial order number, and its standard × button clears back
+    /// to the paged list (regression: the field must be the platform control,
+    /// not a bare TextField with no clear affordance).
+    private func assertOrdersSearch(app: XCUIApplication) {
+        let search = app.searchFields["Search order # or customer…"]
+        XCTAssertTrue(search.waitForExistence(timeout: 30))
+        search.tap()
+        search.typeText("20250115")
+        // The anchor order is order_20250115_0001 — ILIKE '%20250115%' hits it.
+        let hit = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS '20250115'")
+        ).firstMatch
+        XCTAssertTrue(
+            hit.waitForExistence(timeout: 60),
+            "searching '20250115' should find order_20250115_0001"
+        )
+        // The standard clear affordance must exist — tapping it empties the
+        // field, which restores the paged observer list.
+        let clear = search.buttons["Clear text"]
+        XCTAssertTrue(
+            clear.waitForExistence(timeout: 10),
+            "the standard search field must show its × clear button"
+        )
+        clear.tap()
     }
 
     /// Dashboard low-stock card: Seattle has 64 SKUs under 5 units — badge

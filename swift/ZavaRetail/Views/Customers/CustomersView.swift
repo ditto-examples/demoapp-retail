@@ -202,6 +202,7 @@ struct CustomersView: View {
             }
             .background(colors.background)
             .navigationTitle("Customers")
+            .searchable(text: $state.searchText, prompt: "Search name, or exact email…")
             .task { state.start(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in
@@ -217,22 +218,21 @@ struct CustomersView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 10) {
-            AnvilInput(placeholder: "Search name, or exact email…", text: $state.searchText)
-            HStack {
-                Toggle(isOn: $state.thisStoreOnly) {
-                    Text("This store only")
-                        .font(.callout)
-                        .foregroundStyle(colors.foregroundSubtle)
-                }
-                .toggleStyle(.switch)
-                .fixedSize()
-                Spacer()
-                if !state.isSearching {
-                    Text("\(state.totalCount.formatted()) customers")
-                        .font(.dittoCode(size: 12))
-                        .foregroundStyle(colors.foregroundSubtle)
-                }
+        // Search is the platform-standard .searchable field (nav bar /
+        // toolbar) with its × clear affordance; this row keeps the filter.
+        HStack {
+            Toggle(isOn: $state.thisStoreOnly) {
+                Text("This store only")
+                    .font(.callout)
+                    .foregroundStyle(colors.foregroundSubtle)
+            }
+            .toggleStyle(.switch)
+            .fixedSize()
+            Spacer()
+            if !state.isSearching {
+                Text("\(state.totalCount.formatted()) customers")
+                    .font(.dittoCode(size: 12))
+                    .foregroundStyle(colors.foregroundSubtle)
             }
         }
         .padding(.horizontal)

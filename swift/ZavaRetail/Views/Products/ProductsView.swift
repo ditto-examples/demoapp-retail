@@ -268,6 +268,7 @@ struct ProductsView: View {
             }
             .background(colors.background)
             .navigationTitle("Products")
+            .searchable(text: $state.searchText, prompt: "Search name or SKU…")
             .task { await state.start(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in
@@ -287,28 +288,26 @@ struct ProductsView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 10) {
-            AnvilInput(placeholder: "Search name or SKU…", text: $state.searchText)
-            // Flow layout so chips WRAP instead of clipping on narrow windows
-            // (macOS resize, iPad split view).
-            FlowLayout {
-                CategoryChip(title: "All", isSelected: state.selectedCategoryId == nil && !state.lowStockOnly) {
-                    state.selectedCategoryId = nil
+        // Flow layout so chips WRAP instead of clipping on narrow windows
+        // (macOS resize, iPad split view). Search is the platform-standard
+        // .searchable field (nav bar / toolbar) with its × clear affordance.
+        FlowLayout {
+            CategoryChip(title: "All", isSelected: state.selectedCategoryId == nil && !state.lowStockOnly) {
+                state.selectedCategoryId = nil
+                state.lowStockOnly = false
+            }
+            ForEach(state.categories) { category in
+                CategoryChip(
+                    title: category.category_name,
+                    isSelected: state.selectedCategoryId == category.category_id && !state.lowStockOnly
+                ) {
+                    state.selectedCategoryId = category.category_id
                     state.lowStockOnly = false
                 }
-                ForEach(state.categories) { category in
-                    CategoryChip(
-                        title: category.category_name,
-                        isSelected: state.selectedCategoryId == category.category_id && !state.lowStockOnly
-                    ) {
-                        state.selectedCategoryId = category.category_id
-                        state.lowStockOnly = false
-                    }
-                }
-                CategoryChip(title: "⚠ Low stock", isSelected: state.lowStockOnly) {
-                    state.lowStockOnly = true
-                    state.selectedCategoryId = nil
-                }
+            }
+            CategoryChip(title: "⚠ Low stock", isSelected: state.lowStockOnly) {
+                state.lowStockOnly = true
+                state.selectedCategoryId = nil
             }
         }
         .padding(.horizontal)

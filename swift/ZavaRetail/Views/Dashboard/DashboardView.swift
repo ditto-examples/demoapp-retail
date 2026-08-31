@@ -236,7 +236,12 @@ final class DashboardState {
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dittoColors) private var colors
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var state = DashboardState()
+    /// Measured width of the KPI grid's container — drives the 4-up/2×2
+    /// breakpoint (900pt fits four ~210pt cards + gaps). `.infinity` initially
+    /// so the first pass renders 4-up on regular size classes.
+    @State private var kpiGridWidth: CGFloat = .infinity
 
     private var store: Store? {
         appState.stores.first { $0.store_id == appState.selectedStoreId }
@@ -329,50 +334,70 @@ struct DashboardView: View {
         return address == "n/a" ? cityState : "\(address), \(cityState)"
     }
 
-    /// Four KPI widgets share the row evenly (2×2 on narrow screens) — no
-    /// blank space at the trailing edge. Ghost cards while the snapshot belongs
-    /// to another store (initial load / post-switch sync).
+    /// Centered, width-capped row of four equal-width KPI cards — flexible
+    /// columns fill the row with equal gaps, so there's no trailing blank
+    /// space. 4 across on wide layouts, 2×2 when narrow: on compact size
+    /// classes (iPhone) OR when the measured width is tight — the size class
+    /// stays .regular on macOS regardless of window width, so the width check
+    /// is what saves resized macOS windows and iPad split view. Ghost cards
+    /// while the snapshot belongs to another store (initial load / post-switch
+    /// sync).
     private var kpiGrid: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 200, maximum: 400), spacing: 16, alignment: .top)],
-            spacing: 16
-        ) {
-            if state.isStale(for: appState) {
-                SkeletonCard()
-                SkeletonCard()
-                SkeletonCard()
-                SkeletonCard()
-            } else {
-                KpiCard(
-                    title: "Orders",
-                    value: "\(totalOrders.formatted())",
-                    query: DashboardQueries.statusRevenue,
-                    explanation: Explanations.statusRevenue,
-                    identifier: "kpi.orders"
-                )
-                KpiCard(
-                    title: "Revenue (all time)",
-                    value: Formatters.usd(totalRevenue),
-                    query: DashboardQueries.statusRevenue,
-                    explanation: Explanations.statusRevenue,
-                    identifier: "kpi.revenue"
-                )
-                KpiCard(
-                    title: "Customers synced",
-                    value: state.customersCount?.formatted() ?? "…",
-                    query: DashboardQueries.customersCount,
-                    explanation: Explanations.customersCount,
-                    identifier: "kpi.customers"
-                )
-                KpiCard(
-                    title: "Catalog products",
-                    value: state.productsCount?.formatted() ?? "…",
-                    query: DashboardQueries.productsCount,
-                    explanation: Explanations.productsCount,
-                    identifier: "kpi.products"
-                )
+        let columnCount = horizontalSizeClass == .compact || kpiGridWidth < 900 ? 2 : 4
+        let columns = Array(
+            repeating: GridItem(.flexible(), spacing: 16, alignment: .top),
+            count: columnCount
+        )
+        return HStack {
+            Spacer(minLength: 0)
+            LazyVGrid(columns: columns, spacing: 16) {
+                if state.isStale(for: appState) {
+                    SkeletonCard()
+                    SkeletonCard()
+                    SkeletonCard()
+                    SkeletonCard()
+                } else {
+                    kpiCards
+                }
             }
+            .frame(maxWidth: 1400)
+            Spacer(minLength: 0)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+            kpiGridWidth = width
+        }
+    }
+
+    @ViewBuilder
+    private var kpiCards: some View {
+        KpiCard(
+            title: "Orders",
+            value: "\(totalOrders.formatted())",
+            query: DashboardQueries.statusRevenue,
+            explanation: Explanations.statusRevenue,
+            identifier: "kpi.orders"
+        )
+        KpiCard(
+            title: "Revenue (all time)",
+            value: Formatters.usd(totalRevenue),
+            query: DashboardQueries.statusRevenue,
+            explanation: Explanations.statusRevenue,
+            identifier: "kpi.revenue"
+        )
+        KpiCard(
+            title: "Customers synced",
+            value: state.customersCount?.formatted() ?? "…",
+            query: DashboardQueries.customersCount,
+            explanation: Explanations.customersCount,
+            identifier: "kpi.customers"
+        )
+        KpiCard(
+            title: "Catalog products",
+            value: state.productsCount?.formatted() ?? "…",
+            query: DashboardQueries.productsCount,
+            explanation: Explanations.productsCount,
+            identifier: "kpi.products"
+        )
     }
 
     private var trendCard: some View {

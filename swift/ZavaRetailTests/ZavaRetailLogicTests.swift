@@ -260,6 +260,28 @@ final class ZavaRetailLogicTests: XCTestCase {
         XCTAssertEqual(Paging.clampPage(-3, total: 100, pageSize: 25), 1)
     }
 
+    func testOrdersSearchQueryUsesLikeOnOrderNumberAndCustomer() {
+        // Partial order number OR customer name — both via case-insensitive
+        // ILIKE with a contains-pattern arg.
+        let q = OrdersState.searchQuery
+        XCTAssertTrue(q.contains("order_id ILIKE :like"))
+        XCTAssertTrue(q.contains("customer_name ILIKE :like"))
+        XCTAssertTrue(q.contains("store_id = :storeId"))
+        XCTAssertTrue(q.contains("ORDER BY order_date DESC, _id DESC"))
+        XCTAssertTrue(q.contains("LIMIT 50"))
+    }
+
+    func testOrdersSearchTermSanitization() {
+        // Whitespace is trimmed; leading '#' is stripped because the list
+        // renders "order_20250115_0001" as "#20250115_0001".
+        XCTAssertEqual(OrdersState.sanitizedSearchTerm("  20250115  "), "20250115")
+        XCTAssertEqual(OrdersState.sanitizedSearchTerm("#20250115_0001"), "20250115_0001")
+        XCTAssertEqual(OrdersState.sanitizedSearchTerm("##"), "")
+        XCTAssertEqual(OrdersState.sanitizedSearchTerm("   "), "")
+        // '%'/'_' pass through as ILIKE wildcards (documented in the sheet).
+        XCTAssertEqual(OrdersState.sanitizedSearchTerm("2025%"), "2025%")
+    }
+
     // MARK: - Screen state pure logic
 
     func testOrdersCutoffAnchorsToDataNotClock() {

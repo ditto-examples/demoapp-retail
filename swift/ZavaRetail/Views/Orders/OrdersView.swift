@@ -22,6 +22,82 @@ final class OrdersState {
     var activeQuery = ""
     var error: String?
 
+    /// Search (partial order number or customer name) — one-shot
+    /// case-insensitive ILIKE queries with 500 ms debounce; the paged observer
+    /// drives the list otherwise.
+    var searchText = ""
+    var searchResults: [Order]?
+    var isSearching: Bool {
+        searchResults != nil
+    }
+
+    var visibleOrders: [Order] {
+        searchResults ?? orders
+    }
+
+    /// DQL ILIKE (LIKE's case-insensitive variant) on both order number and
+    /// customer name. nonisolated: read by tests off the main actor.
+    nonisolated static let searchQuery = """
+    SELECT * FROM orders WHERE store_id = :storeId AND deleted = false \
+    AND (order_id ILIKE :like OR customer_name ILIKE :like) \
+    ORDER BY order_date DESC, _id DESC LIMIT 50
+    """
+
+    /// Search input cleanup: trim whitespace and drop leading '#' characters —
+    /// the list renders order numbers as "#20250115_0001" but the stored id is
+    /// "order_20250115_0001". '%' and '_' are left alone: they're ILIKE
+    /// wildcards (the info sheet says so), and '_' matches real order ids.
+    nonisolated static func sanitizedSearchTerm(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        return String(trimmed.drop(while: { $0 == "#" }))
+    }
+
+    /// Dedicated search task — deliberately NOT restartTask: typing must not
+    /// cancel a pending observer restart (store switch / page change), and a
+    /// restart must not await the 500 ms debounce.
+    private var searchTask: Task<Void, Never>?
+
+    func search(appState: AppState) {
+        searchTask?.cancel()
+        let term = Self.sanitizedSearchTerm(searchText)
+        if term.isEmpty {
+            searchResults = nil
+            return
+        }
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            // Read the store AFTER the debounce: a store switch during the
+            // sleep must not fetch the old store's rows into the new context.
+            guard let storeId = appState.selectedStoreId else { return }
+            do {
+                let results = try await DittoManager.shared.fetch(
+                    Self.searchQuery,
+                    arguments: ["storeId": storeId, "like": "%\(term)%"],
+                    as: Order.self
+                )
+                guard !Task.isCancelled else { return }
+                self?.searchResults = results
+                self?.error = nil
+            } catch is CancellationError {
+            } catch {
+                self?.error = error.localizedDescription
+            }
+        }
+    }
+
+    /// Store switch while a search may be active: drop the old store's matches
+    /// immediately (never render another store's data), restart the paged
+    /// observers, and re-run the search against the new store (search()
+    /// cancels any in-flight search fetch first, so late old-store results
+    /// are discarded by its cancellation guard).
+    func handleStoreSwitch(appState: AppState) {
+        searchResults = nil
+        page = 1
+        restart(appState: appState)
+        search(appState: appState)
+    }
+
     private var pageObserver: DittoStoreObserver?
     private var countObserver: DittoStoreObserver?
     private var lastStoreId: String?
@@ -136,6 +212,8 @@ final class OrdersState {
         countObserver = nil
         restartTask?.cancel()
         restartTask = nil
+        searchTask?.cancel()
+        searchTask = nil
     }
 
     private func latestOrderDate(storeId: String) async -> String? {
@@ -174,15 +252,54 @@ struct OrdersView: View {
     cutoff — the info sheet above shows the exact query running, cutoff included.
     """
 
+    /// What the info sheet shows WHILE searching — the list is then driven by
+    /// the ILIKE one-shot, not the paged observer, so the sheet says so.
+    static let searchExplanation = """
+    While you type, the list is driven by this one-shot query (500 ms debounce) \
+    instead of the live paged observer. ILIKE is LIKE's case-insensitive \
+    variant, so partial order numbers and customer names match regardless of \
+    case. '%' and '_' in your input act as wildcards, and matches are capped \
+    at 50 rows. Search matches across all dates — it ignores the "Recent only" \
+    filter. Clear the field (the × button) to return to the live, paginated list.
+    """
+
     @Environment(AppState.self) private var appState
     @Environment(\.dittoColors) private var colors
     @State private var state = OrdersState()
+
+    /// The query actually driving the list right now: the ILIKE one-shot with
+    /// args resolved inline while searching, else the live paged observer
+    /// query (or its template before the first emission).
+    private var displayedQuery: String {
+        if state.isSearching, let storeId = appState.selectedStoreId {
+            let term = OrdersState.sanitizedSearchTerm(state.searchText)
+            return OrdersState.searchQuery
+                .replacingOccurrences(of: ":storeId", with: "'\(storeId)'")
+                .replacingOccurrences(of: ":like", with: "'%\(term)%'")
+        }
+        return state.activeQuery.isEmpty
+            ? "SELECT * \(OrdersState.baseWhere) ORDER BY order_date DESC"
+            : state.activeQuery
+    }
+
+    /// Footer shown in place of the pagination bar while searching — same 44pt
+    /// height so the list doesn't jump, and it discloses the LIMIT 50 cap.
+    private var searchFooterText: String {
+        let count = state.visibleOrders.count
+        if count >= 50 {
+            return "First 50 matches shown (cap) — refine the term, or clear search for the paged list"
+        }
+        return "\(count) \(count == 1 ? "match" : "matches") — clear search for the paged list"
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Filter row: labeled toggle + info sheet showing the ACTUAL
-                // query running (resolved cutoff included), not a template.
+                // query running (the search query while searching), not a
+                // template. Search itself is the platform-standard .searchable
+                // field (nav bar on iOS, toolbar on macOS) — with the standard
+                // × clear affordance, which a plain TextField lacks.
                 HStack(spacing: 8) {
                     Toggle(isOn: $state.recentOnly) {
                         Text("Recent only (last 30 days of data)")
@@ -193,10 +310,10 @@ struct OrdersView: View {
                     .fixedSize()
                     Spacer()
                     QueryInfoButton(
-                        query: state.activeQuery.isEmpty
-                            ? "SELECT * \(OrdersState.baseWhere) ORDER BY order_date DESC"
-                            : state.activeQuery,
-                        explanation: Self.recentExplanation
+                        query: displayedQuery,
+                        explanation: state.isSearching
+                            ? Self.searchExplanation
+                            : Self.recentExplanation
                     )
                 }
                 .padding(.horizontal)
@@ -205,17 +322,20 @@ struct OrdersView: View {
                 Divider()
 
                 Group {
-                    if state.orders.isEmpty {
+                    if state.visibleOrders.isEmpty {
                         VStack(spacing: 12) {
                             if let error = state.error {
                                 AnvilBadge(error, status: .critical)
+                            } else if state.isSearching {
+                                Text("No matches")
+                                    .foregroundStyle(colors.foregroundSubtle)
                             } else {
                                 SkeletonRows(count: 8)
                             }
                         }
                         .frame(maxHeight: .infinity)
                     } else {
-                        List(state.orders) { order in
+                        List(state.visibleOrders) { order in
                             NavigationLink(destination: OrderDetailView(order: order)) {
                                 OrderRow(order: order)
                             }
@@ -225,27 +345,44 @@ struct OrdersView: View {
                 }
 
                 Divider()
-                PaginationBar(
-                    totalCount: state.totalCount,
-                    page: $state.page,
-                    pageSize: $state.pageSize,
-                    pageSizes: [25, 50, 100, 250]
-                ) {
-                    state.restart(appState: appState)
+                if state.isSearching {
+                    HStack {
+                        Text(searchFooterText)
+                            .font(.caption)
+                            .foregroundStyle(colors.foregroundSubtle)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    // Match the pagination bar's height (32pt controls + 6+6
+                    // padding) so the list doesn't jump when search toggles.
+                    .frame(height: 44)
+                    .background(colors.surface)
+                } else {
+                    PaginationBar(
+                        totalCount: state.totalCount,
+                        page: $state.page,
+                        pageSize: $state.pageSize,
+                        pageSizes: [25, 50, 100, 250]
+                    ) {
+                        state.restart(appState: appState)
+                    }
+                    .background(colors.surface)
                 }
-                .background(colors.surface)
             }
             .background(colors.background)
             .navigationTitle("Orders")
+            .searchable(text: $state.searchText, prompt: "Search order # or customer…")
             .task { state.restart(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in
-                state.page = 1
-                state.restart(appState: appState)
+                state.handleStoreSwitch(appState: appState)
             }
             .onChange(of: state.recentOnly) { _, _ in
                 state.page = 1
                 state.restart(appState: appState)
+            }
+            .onChange(of: state.searchText) { _, _ in
+                state.search(appState: appState)
             }
         }
     }

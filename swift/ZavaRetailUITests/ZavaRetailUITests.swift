@@ -21,9 +21,12 @@ final class ZavaRetailUITests: XCTestCase {
         )
         seattle.tap()
 
-        // Dashboard with the selected store.
+        // Dashboard with the selected store (the header's switcher menu label).
         XCTAssertTrue(app.navigationBars["Dashboard"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.staticTexts["Zava Retail Seattle"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["storeSwitcher"].waitForExistence(timeout: 30))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Zava Retail Seattle"].waitForExistence(timeout: 30)
+        )
 
         // Orders KPI fills in as the per-store subscription syncs (100k slice:
         // ~25K orders for Seattle — the first page lands quickly).

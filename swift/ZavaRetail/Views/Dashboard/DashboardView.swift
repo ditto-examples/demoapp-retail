@@ -83,7 +83,7 @@ final class DashboardState {
     var lowStockCount: Int?
     var lowStockItems: [InventoryItem] = []
     var topProducts: [TopProductRow] = []
-    var topProductsLimit = 10
+    var topProductsLimit = 5
     var customersCount: Int?
     var productsCount: Int?
     var productNames: [String: String] = [:]
@@ -232,21 +232,60 @@ struct DashboardView: View {
         }
     }
 
+    /// One line: store name (tap to switch stores in place — no trip to the
+    /// Ditto tab) · location. The store picker is the showcase flow; this menu
+    /// is the fast path.
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(store?.store_name ?? appState.selectedStoreId ?? "—")
-                .font(.title2)
-                .fontWeight(.semibold)
-                .foregroundStyle(colors.foregroundNormal)
-            if let store {
-                Text("\(store.location.address), \(store.location.city), \(store.location.state)")
-                    .font(.subheadline)
-                    .foregroundStyle(colors.foregroundSubtle)
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(appState.stores) { store in
+                        Button {
+                            if store.store_id != appState.selectedStoreId {
+                                appState.selectStore(store.store_id)
+                            }
+                        } label: {
+                            HStack {
+                                Text(store.store_name)
+                                if store.store_id == appState.selectedStoreId {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(store?.store_name ?? appState.selectedStoreId ?? "—")
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(colors.foregroundNormal)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(colors.foregroundSubtle)
+                    }
+                }
+                .accessibilityIdentifier("storeSwitcher")
+
+                if let store {
+                    Text("· \(locationOneLiner(store))")
+                        .font(.subheadline)
+                        .foregroundStyle(colors.foregroundSubtle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+                Spacer()
             }
             if let error = state.error {
                 AnvilBadge(error, status: .critical)
             }
         }
+    }
+
+    private func locationOneLiner(_ store: Store) -> String {
+        let address = store.location.address
+        let cityState = "\(store.location.city), \(store.location.state)"
+        // The online store's address is the placeholder "n/a".
+        return address == "n/a" ? cityState : "\(address), \(cityState)"
     }
 
     /// Four KPI widgets share the row evenly (2×2 on narrow screens) — no
@@ -397,7 +436,7 @@ struct DashboardView: View {
                         .font(.headline).foregroundStyle(colors.foregroundNormal)
                     Spacer()
                     Menu("Top \(state.topProductsLimit)") {
-                        ForEach([10, 25, 50, 100], id: \.self) { limit in
+                        ForEach([5, 10, 25, 50, 100], id: \.self) { limit in
                             Button("\(limit)") {
                                 state.topProductsLimit = limit
                                 Task { await state.refresh(appState: appState) }

@@ -17,6 +17,9 @@ final class OrdersState {
     var page = 1
     var pageSize = 25
     var recentOnly = false
+    /// The exact query currently observed — shown verbatim in the info sheet
+    /// (with the resolved cutoff substituted, not a template).
+    var activeQuery = ""
     var error: String?
 
     private var pageObserver: DittoStoreObserver?
@@ -57,6 +60,44 @@ final class OrdersState {
         }
         lastStoreId = storeId
 
+        let built = await buildQueries(storeId: storeId)
+        activeQuery = built.displayQuery
+
+        do {
+            countObserver = try await DittoManager.shared.observe(
+                built.countQuery, arguments: built.arguments, as: CountRow.self
+            ) { [weak self] rows in
+                guard let self else { return }
+                totalCount = rows.first?.count ?? 0
+                let clamped = Paging.clampPage(page, total: totalCount, pageSize: pageSize)
+                if clamped != page {
+                    page = clamped
+                    restart(appState: appState)
+                }
+            }
+            pageObserver = try await DittoManager.shared.observe(
+                built.pageQuery, arguments: built.arguments, as: Order.self
+            ) { [weak self] orders in
+                self?.orders = orders
+            }
+            error = nil
+        } catch is CancellationError {
+            // View torn down mid-restart — not an error state.
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// The queries for the current filters (page + count + the display string
+    /// for the info sheet with args resolved inline).
+    private struct BuiltQueries {
+        let pageQuery: String
+        let countQuery: String
+        let displayQuery: String
+        let arguments: [String: Sendable]
+    }
+
+    private func buildQueries(storeId: String) async -> BuiltQueries {
         var whereClause = Self.baseWhere
         var arguments: [String: Sendable] = ["storeId": storeId]
         if recentOnly,
@@ -76,30 +117,16 @@ final class OrdersState {
             pageSize: pageSize
         )
         let countQuery = "SELECT COUNT(*) AS count \(whereClause)"
-
-        do {
-            countObserver = try await DittoManager.shared.observe(
-                countQuery, arguments: arguments, as: CountRow.self
-            ) { [weak self] rows in
-                guard let self else { return }
-                totalCount = rows.first?.count ?? 0
-                let clamped = Paging.clampPage(page, total: totalCount, pageSize: pageSize)
-                if clamped != page {
-                    page = clamped
-                    restart(appState: appState)
-                }
-            }
-            pageObserver = try await DittoManager.shared.observe(
-                pageQuery, arguments: arguments, as: Order.self
-            ) { [weak self] orders in
-                self?.orders = orders
-            }
-            error = nil
-        } catch is CancellationError {
-            // View torn down mid-restart — not an error state.
-        } catch {
-            self.error = error.localizedDescription
+        var displayQuery = pageQuery
+        for (key, value) in arguments {
+            displayQuery = displayQuery.replacingOccurrences(of: ":\(key)", with: "'\(value)'")
         }
+        return BuiltQueries(
+            pageQuery: pageQuery,
+            countQuery: countQuery,
+            displayQuery: displayQuery,
+            arguments: arguments
+        )
     }
 
     func stop() {
@@ -136,6 +163,17 @@ final class OrdersState {
 }
 
 struct OrdersView: View {
+    /// Why "Recent only" anchors to the DATA, not the clock — the single most
+    /// surprising thing about demoing on a fixed benchmark dataset.
+    static let recentExplanation = """
+    Filters to orders from the last 30 days OF THE DATASET — the benchmark's \
+    data ends 2025-06-27, so the cutoff is anchored to the newest synced order \
+    (max(order_date) − 30 days), not to today's date. A naive "now minus 30 \
+    days" filter would show zero rows in a demo. This is the benchmark's \
+    date-range query shape (orders__select__by_date_range) with a parameterized \
+    cutoff — the info sheet above shows the exact query running, cutoff included.
+    """
+
     @Environment(AppState.self) private var appState
     @Environment(\.dittoColors) private var colors
     @State private var state = OrdersState()
@@ -143,6 +181,29 @@ struct OrdersView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Filter row: labeled toggle + info sheet showing the ACTUAL
+                // query running (resolved cutoff included), not a template.
+                HStack(spacing: 8) {
+                    Toggle(isOn: $state.recentOnly) {
+                        Text("Recent only (last 30 days of data)")
+                            .font(.callout)
+                            .foregroundStyle(colors.foregroundNormal)
+                    }
+                    .toggleStyle(.switch)
+                    .fixedSize()
+                    Spacer()
+                    QueryInfoButton(
+                        query: state.activeQuery.isEmpty
+                            ? "SELECT * \(OrdersState.baseWhere) ORDER BY order_date DESC"
+                            : state.activeQuery,
+                        explanation: Self.recentExplanation
+                    )
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+
+                Divider()
+
                 Group {
                     if state.orders.isEmpty {
                         VStack(spacing: 12) {
@@ -176,16 +237,6 @@ struct OrdersView: View {
             }
             .background(colors.background)
             .navigationTitle("Orders")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Toggle(isOn: $state.recentOnly) {
-                        Text("Recent (30d of data)")
-                            .font(.callout)
-                    }
-                    .toggleStyle(.switch)
-                    .fixedSize()
-                }
-            }
             .task { state.restart(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in

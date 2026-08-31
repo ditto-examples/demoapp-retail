@@ -30,6 +30,17 @@ periphery:
 build: setup
 	xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination '$(SIM)' build
 
+# Build + run the macOS app from a STABLE location (swift/dist/). Never run
+# the .app straight out of DerivedData: builds replace that bundle in place,
+# and launching it mid-build crashes on a half-copied DittoSwift.framework.
+run-mac:
+	xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO
+	rm -rf dist/ZavaRetail.app
+	mkdir -p dist
+	BUILD_DIR=$$(xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -showBuildSettings -destination 'platform=macOS' 2>/dev/null | grep -m1 ' BUILD_DIR ' | awk '{print $$3}') && \
+	cp -R "$$BUILD_DIR/Debug/ZavaRetail.app" dist/ZavaRetail.app
+	open dist/ZavaRetail.app
+
 test:
 	xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination '$(SIM)' -only-testing:ZavaRetailTests test
 

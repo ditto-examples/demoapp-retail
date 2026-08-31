@@ -26,6 +26,8 @@ DerivedData/
 xcuserdata/
 .build/
 .swiftpm/
+swift/dist/
+swift/build/
 
 # Flutter
 .dart_tool/

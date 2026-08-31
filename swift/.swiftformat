@@ -1,0 +1,45 @@
+# SwiftFormat — the formatting authority for Zava Retail.
+# (SwiftLint's conflicting rules are disabled; see .swiftlint.yml.)
+
+--exclude Generated
+--exclude .build
+--exclude DerivedData
+--exclude ZavaRetail.xcodeproj
+
+--swiftversion 6.2
+
+--indent 4
+--tabwidth 4
+--indentcase false
+--ifdef no-indent
+
+--maxwidth 160
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+
+--trimwhitespace always
+--commas inline
+--semicolons inline
+
+--importgrouping testable-bottom
+--stripunusedargs closure-only
+
+--allman false
+--elseposition same-line
+--guardelse same-line
+
+--redundanttype inferred
+--self remove
+
+--enable isEmpty
+--enable sortImports
+--enable blankLinesAtStartOfScope
+--enable blankLinesAtEndOfScope
+--enable blankLinesBetweenScopes
+--enable redundantSelf
+--enable trailingCommas
+
+--disable redundantReturn
+--disable andOperator

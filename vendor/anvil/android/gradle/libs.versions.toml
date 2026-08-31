@@ -1,0 +1,26 @@
+[versions]
+# Toolchain
+agp = "9.3.1"      # vendored override (was 8.13.2): AGP 8.x cannot run on the consumers Gradle 9.7
+kotlin = "2.4.10"   # vendored override (was 2.2.21): align with the consuming app
+composeMultiplatform = "1.9.3"
+
+# Android-only libraries (anvil-material3 + catalog-expressive)
+composeBom = "2025.12.01"
+activityCompose = "1.13.0"
+material3Expressive = "1.4.0"
+material3Alpha = "1.5.0-alpha26"
+
+[plugins]
+androidLibrary = { id = "com.android.library", version.ref = "agp" }
+androidApplication = { id = "com.android.application", version.ref = "agp" }
+kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
+
+[libraries]
+cmp-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-material3 = { module = "androidx.compose.material3:material3", version.ref = "material3Expressive" }
+androidx-material3-alpha = { module = "androidx.compose.material3:material3", version.ref = "material3Alpha" }

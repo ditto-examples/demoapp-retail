@@ -1,0 +1,932 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0DFE713827AC62A3139E29AD /* OrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26DF81F0DC4A5A1C49BCE2EA /* OrdersView.swift */; };
+		126AFF1FA6F0C3FA07283180 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C7A095635AD11CB024B439 /* DashboardView.swift */; };
+		2007A35496E048EFF6A14F37 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7666F6794BD5E605B653F54A /* Models.swift */; };
+		200DCEBAF7C44013481D4513 /* ibm_plex_mono_regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A4FD0E15147E7E36DACDD9D7 /* ibm_plex_mono_regular.ttf */; };
+		2034F030EF06D863FC132110 /* DatabaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB0FEAF351DB701CB06E30E /* DatabaseConfig.swift */; };
+		22363816DD78A55814D8C4E8 /* benchmarks.json in Resources */ = {isa = PBXBuildFile; fileRef = 84CF1457FDAA643582C2D72A /* benchmarks.json */; };
+		2236C03AB930EFA6137B4749 /* ProductsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C477E5B15A88C6F15C627334 /* ProductsView.swift */; };
+		2AB316E674532B7902B07EB7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8E33F191CDC1707DEE9D18 /* RootView.swift */; };
+		2CA68AEA2811064D2EEDC068 /* StorePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17DF5F2005B9B2A66069FAD /* StorePickerView.swift */; };
+		306972150A537FBE89980488 /* DittoTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E169DC4CE1BB77433EC186E /* DittoTabView.swift */; };
+		4E3328FFEEFF28E4EE37E423 /* DittoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94C9B6EF4121F7083BEF7002 /* DittoManager.swift */; };
+		51034206A05420538BAB3BA9 /* ibm_plex_mono_bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 00E5E6EBBDB7F748385D175A /* ibm_plex_mono_bold.ttf */; };
+		52CACE27D7A7578204A8F065 /* benchmarks.json in Resources */ = {isa = PBXBuildFile; fileRef = 84CF1457FDAA643582C2D72A /* benchmarks.json */; };
+		5CB0FCB855B85CF29853B36A /* ZavaRetailApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B169248D7E6030CE724123D4 /* ZavaRetailApp.swift */; };
+		617A5EA21E4373A7B059A9B1 /* ZavaRetailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9904CB102B5DEBCBBD8D7A /* ZavaRetailTests.swift */; };
+		62901884AEA00B67219A4B1D /* ibm_plex_mono_italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2385DC6B2FC798F491DFED5C /* ibm_plex_mono_italic.ttf */; };
+		64FD0455927E98442284DC74 /* BenchmarkCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B7FE7877166899FCAE16A6 /* BenchmarkCatalog.swift */; };
+		659E824038669D2F0B09C239 /* QueryCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AC1D9015D767A0FC717CFA /* QueryCatalogView.swift */; };
+		7C592399AF1A109798630142 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 498333BED6C921D0DB9F264A /* AppState.swift */; };
+		811E8C78010B97729807D729 /* ZavaRetailLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */; };
+		90A45A71F962E23CFC843335 /* CustomersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85AE3C784E9463F9070A973A /* CustomersView.swift */; };
+		92F85C758D7529F3E178C4BA /* ModelContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2100067FCD63A1F994739F /* ModelContractTests.swift */; };
+		A2F1D53BFCC78541B363D8DA /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FD6C6448DCB0E8B4D97BF1 /* FontRegistration.swift */; };
+		A2FEFD02259710CE07FF3CE5 /* QueryInfoButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F5627A9F1C7138F3EF83EC /* QueryInfoButton.swift */; };
+		A3426949F75516E119A3DF53 /* inter_regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A9FC4539CC3D6BB53C41B9C7 /* inter_regular.ttf */; };
+		AB1341A41822A3852E06BFEA /* PaginationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F8BAEDDF31190D02B94F7A4 /* PaginationBar.swift */; };
+		AF5D824C7FAAE9151DD343B7 /* StoreSwitchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4A0E3BCFA6A98B8E68EBDC /* StoreSwitchUITests.swift */; };
+		B0157C24C1048EB23AAE2291 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39810E047566FB365AB3A658 /* Formatters.swift */; };
+		B93FD0ACF9CE7830D63BD063 /* QueryRunnerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED5440FBA9C010BFE21ADAC /* QueryRunnerUITests.swift */; };
+		C0C295F9D5CB6E56B7930C07 /* Anvil in Frameworks */ = {isa = PBXBuildFile; productRef = C3E9BC59B6001BA0D47C55FD /* Anvil */; };
+		C983758D0688AA219B16AAE4 /* ZavaRetailUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59C50A9F3B0E7E83854406C /* ZavaRetailUITests.swift */; };
+		D098DA082184E7534EAA17D0 /* Env.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30AC555C9111E7C3BD954D0 /* Env.swift */; };
+		D373FEA70E8E17F76E92A82C /* TabTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35A89A22AAC427EE67AD22E /* TabTourUITests.swift */; };
+		DEB0C6015DD07AA5A62694A9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5DB741FE22D22FF5FEF855D4 /* Assets.xcassets */; };
+		DFA6DF7E02FB6303A869625F /* DittoSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 0D37594324DFE347046A4322 /* DittoSwift */; };
+		E4B134C70B8F0A9E969F0A40 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73EDF683DA8636DBED32A493 /* FlowLayout.swift */; };
+		ED98885B73B196D22EDB2AD6 /* retail_samples.json in Resources */ = {isa = PBXBuildFile; fileRef = 5457B247D96FD947351D99D6 /* retail_samples.json */; };
+		F2393DC4EC21574C2DD0C3E9 /* DittoAllToolsMenu in Frameworks */ = {isa = PBXBuildFile; productRef = 2525B5C90EC10C7BA1FEC712 /* DittoAllToolsMenu */; };
+		FA89A688B76793A0F1B656B2 /* SkeletonBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D3FC985481E367471FCD5C /* SkeletonBox.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		6D20CD11CE1C96752C414A34 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1D5AF444D7DA5E8813CB73EF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 38BA8A217D84D16BC6CBE41E;
+			remoteInfo = ZavaRetail;
+		};
+		9AB64D254FFD9AD83F3927E5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1D5AF444D7DA5E8813CB73EF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 38BA8A217D84D16BC6CBE41E;
+			remoteInfo = ZavaRetail;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		00E5E6EBBDB7F748385D175A /* ibm_plex_mono_bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = ibm_plex_mono_bold.ttf; sourceTree = "<group>"; };
+		0769C5D5A846035657382E35 /* ZavaRetailUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ZavaRetailUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0F8BAEDDF31190D02B94F7A4 /* PaginationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaginationBar.swift; sourceTree = "<group>"; };
+		2385DC6B2FC798F491DFED5C /* ibm_plex_mono_italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = ibm_plex_mono_italic.ttf; sourceTree = "<group>"; };
+		26DF81F0DC4A5A1C49BCE2EA /* OrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersView.swift; sourceTree = "<group>"; };
+		31F5627A9F1C7138F3EF83EC /* QueryInfoButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryInfoButton.swift; sourceTree = "<group>"; };
+		39810E047566FB365AB3A658 /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
+		3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailLogicTests.swift; sourceTree = "<group>"; };
+		498333BED6C921D0DB9F264A /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		4E169DC4CE1BB77433EC186E /* DittoTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DittoTabView.swift; sourceTree = "<group>"; };
+		4FB0FEAF351DB701CB06E30E /* DatabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseConfig.swift; sourceTree = "<group>"; };
+		5457B247D96FD947351D99D6 /* retail_samples.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = retail_samples.json; sourceTree = "<group>"; };
+		5C9904CB102B5DEBCBBD8D7A /* ZavaRetailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailTests.swift; sourceTree = "<group>"; };
+		5DA2DAD735B3100561CF647A /* ZavaRetail.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZavaRetail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5DB741FE22D22FF5FEF855D4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		6B8E33F191CDC1707DEE9D18 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		72C7A095635AD11CB024B439 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		73EDF683DA8636DBED32A493 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
+		7666F6794BD5E605B653F54A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		7D4A0E3BCFA6A98B8E68EBDC /* StoreSwitchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSwitchUITests.swift; sourceTree = "<group>"; };
+		83FAEC32AEE91ABC779057B0 /* ZavaRetailTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ZavaRetailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		84CF1457FDAA643582C2D72A /* benchmarks.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = benchmarks.json; sourceTree = "<group>"; };
+		85AE3C784E9463F9070A973A /* CustomersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomersView.swift; sourceTree = "<group>"; };
+		94C9B6EF4121F7083BEF7002 /* DittoManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DittoManager.swift; sourceTree = "<group>"; };
+		95FD6C6448DCB0E8B4D97BF1 /* FontRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontRegistration.swift; sourceTree = "<group>"; };
+		A4FD0E15147E7E36DACDD9D7 /* ibm_plex_mono_regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = ibm_plex_mono_regular.ttf; sourceTree = "<group>"; };
+		A9FC4539CC3D6BB53C41B9C7 /* inter_regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = inter_regular.ttf; sourceTree = "<group>"; };
+		B169248D7E6030CE724123D4 /* ZavaRetailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailApp.swift; sourceTree = "<group>"; };
+		B2A972431A3930F438EC0FCC /* Anvil */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Anvil; path = ../vendor/anvil/swift/Anvil; sourceTree = SOURCE_ROOT; };
+		B35A89A22AAC427EE67AD22E /* TabTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabTourUITests.swift; sourceTree = "<group>"; };
+		B7D3FC985481E367471FCD5C /* SkeletonBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonBox.swift; sourceTree = "<group>"; };
+		C477E5B15A88C6F15C627334 /* ProductsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductsView.swift; sourceTree = "<group>"; };
+		C4B7FE7877166899FCAE16A6 /* BenchmarkCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkCatalog.swift; sourceTree = "<group>"; };
+		C59C50A9F3B0E7E83854406C /* ZavaRetailUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailUITests.swift; sourceTree = "<group>"; };
+		D30AC555C9111E7C3BD954D0 /* Env.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Env.swift; sourceTree = "<group>"; };
+		ED2100067FCD63A1F994739F /* ModelContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContractTests.swift; sourceTree = "<group>"; };
+		EED5440FBA9C010BFE21ADAC /* QueryRunnerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryRunnerUITests.swift; sourceTree = "<group>"; };
+		F17DF5F2005B9B2A66069FAD /* StorePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePickerView.swift; sourceTree = "<group>"; };
+		F2AC1D9015D767A0FC717CFA /* QueryCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryCatalogView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B3D8420A4EF638B0A5A725D7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0C295F9D5CB6E56B7930C07 /* Anvil in Frameworks */,
+				DFA6DF7E02FB6303A869625F /* DittoSwift in Frameworks */,
+				F2393DC4EC21574C2DD0C3E9 /* DittoAllToolsMenu in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		05FBC5E41A59D6020FB5FEB2 /* ZavaRetailUITests */ = {
+			isa = PBXGroup;
+			children = (
+				EED5440FBA9C010BFE21ADAC /* QueryRunnerUITests.swift */,
+				7D4A0E3BCFA6A98B8E68EBDC /* StoreSwitchUITests.swift */,
+				B35A89A22AAC427EE67AD22E /* TabTourUITests.swift */,
+				C59C50A9F3B0E7E83854406C /* ZavaRetailUITests.swift */,
+			);
+			path = ZavaRetailUITests;
+			sourceTree = "<group>";
+		};
+		0B4E82D5142877F7857F92E5 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				498333BED6C921D0DB9F264A /* AppState.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
+		0E371204A17E5081883149BB /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				72C7A095635AD11CB024B439 /* DashboardView.swift */,
+			);
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		19EAB0A34F162835B7669C00 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5DA2DAD735B3100561CF647A /* ZavaRetail.app */,
+				83FAEC32AEE91ABC779057B0 /* ZavaRetailTests.xctest */,
+				0769C5D5A846035657382E35 /* ZavaRetailUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		2AA9481327BD0EDE3AE238C5 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				C4B7FE7877166899FCAE16A6 /* BenchmarkCatalog.swift */,
+				7666F6794BD5E605B653F54A /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		2F994743F0503C171D6D1F32 /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				D30AC555C9111E7C3BD954D0 /* Env.swift */,
+			);
+			path = Generated;
+			sourceTree = "<group>";
+		};
+		39FB0E65D65226FFFA7ED968 /* fonts */ = {
+			isa = PBXGroup;
+			children = (
+				00E5E6EBBDB7F748385D175A /* ibm_plex_mono_bold.ttf */,
+				2385DC6B2FC798F491DFED5C /* ibm_plex_mono_italic.ttf */,
+				A4FD0E15147E7E36DACDD9D7 /* ibm_plex_mono_regular.ttf */,
+				A9FC4539CC3D6BB53C41B9C7 /* inter_regular.ttf */,
+			);
+			name = fonts;
+			path = ../vendor/anvil/fonts;
+			sourceTree = "<group>";
+		};
+		470A2A1FF1737510F1AC9630 /* shared */ = {
+			isa = PBXGroup;
+			children = (
+				84CF1457FDAA643582C2D72A /* benchmarks.json */,
+			);
+			name = shared;
+			path = ../shared;
+			sourceTree = "<group>";
+		};
+		4895C7B039F794379B94303A /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				73EDF683DA8636DBED32A493 /* FlowLayout.swift */,
+				39810E047566FB365AB3A658 /* Formatters.swift */,
+				0F8BAEDDF31190D02B94F7A4 /* PaginationBar.swift */,
+				31F5627A9F1C7138F3EF83EC /* QueryInfoButton.swift */,
+				B7D3FC985481E367471FCD5C /* SkeletonBox.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		4C60F063FA7C07B8812D0754 /* Ditto */ = {
+			isa = PBXGroup;
+			children = (
+				4E169DC4CE1BB77433EC186E /* DittoTabView.swift */,
+			);
+			path = Ditto;
+			sourceTree = "<group>";
+		};
+		5FD660D682F7FC607970DEE5 /* ZavaRetail */ = {
+			isa = PBXGroup;
+			children = (
+				5DB741FE22D22FF5FEF855D4 /* Assets.xcassets */,
+				95FD6C6448DCB0E8B4D97BF1 /* FontRegistration.swift */,
+				B169248D7E6030CE724123D4 /* ZavaRetailApp.swift */,
+				C4161D22116848DB17053169 /* Data */,
+				2AA9481327BD0EDE3AE238C5 /* Models */,
+				0B4E82D5142877F7857F92E5 /* State */,
+				9E50E8E736B0CEA18ED393AA /* Views */,
+			);
+			path = ZavaRetail;
+			sourceTree = "<group>";
+		};
+		638B4D5E89E15C1C3831878E /* Customers */ = {
+			isa = PBXGroup;
+			children = (
+				85AE3C784E9463F9070A973A /* CustomersView.swift */,
+			);
+			path = Customers;
+			sourceTree = "<group>";
+		};
+		64345C97786E66DDC327ABC7 /* Queries */ = {
+			isa = PBXGroup;
+			children = (
+				F2AC1D9015D767A0FC717CFA /* QueryCatalogView.swift */,
+			);
+			path = Queries;
+			sourceTree = "<group>";
+		};
+		7FD7FF439A2E60B16056AFA9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C477E5B15A88C6F15C627334 /* ProductsView.swift */,
+			);
+			path = Products;
+			sourceTree = "<group>";
+		};
+		8DBE6BCA583CBE27B28EC5BC /* ZavaRetailTests */ = {
+			isa = PBXGroup;
+			children = (
+				ED2100067FCD63A1F994739F /* ModelContractTests.swift */,
+				5457B247D96FD947351D99D6 /* retail_samples.json */,
+				3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */,
+				5C9904CB102B5DEBCBBD8D7A /* ZavaRetailTests.swift */,
+			);
+			path = ZavaRetailTests;
+			sourceTree = "<group>";
+		};
+		9E50E8E736B0CEA18ED393AA /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				6B8E33F191CDC1707DEE9D18 /* RootView.swift */,
+				F17DF5F2005B9B2A66069FAD /* StorePickerView.swift */,
+				638B4D5E89E15C1C3831878E /* Customers */,
+				0E371204A17E5081883149BB /* Dashboard */,
+				4C60F063FA7C07B8812D0754 /* Ditto */,
+				C55C691E8EB8090EDB6F5759 /* Orders */,
+				7FD7FF439A2E60B16056AFA9 /* Products */,
+				64345C97786E66DDC327ABC7 /* Queries */,
+				4895C7B039F794379B94303A /* Shared */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		B4AFB2316394D99255BFADCC /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				B2A972431A3930F438EC0FCC /* Anvil */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		C4161D22116848DB17053169 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				4FB0FEAF351DB701CB06E30E /* DatabaseConfig.swift */,
+				94C9B6EF4121F7083BEF7002 /* DittoManager.swift */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		C55C691E8EB8090EDB6F5759 /* Orders */ = {
+			isa = PBXGroup;
+			children = (
+				26DF81F0DC4A5A1C49BCE2EA /* OrdersView.swift */,
+			);
+			path = Orders;
+			sourceTree = "<group>";
+		};
+		FDEA480507CBE12EA376F0CB = {
+			isa = PBXGroup;
+			children = (
+				39FB0E65D65226FFFA7ED968 /* fonts */,
+				2F994743F0503C171D6D1F32 /* Generated */,
+				B4AFB2316394D99255BFADCC /* Packages */,
+				470A2A1FF1737510F1AC9630 /* shared */,
+				5FD660D682F7FC607970DEE5 /* ZavaRetail */,
+				8DBE6BCA583CBE27B28EC5BC /* ZavaRetailTests */,
+				05FBC5E41A59D6020FB5FEB2 /* ZavaRetailUITests */,
+				19EAB0A34F162835B7669C00 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		08DBA7E793173806493DE39A /* ZavaRetailTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D451E9FF440E702A636A2054 /* Build configuration list for PBXNativeTarget "ZavaRetailTests" */;
+			buildPhases = (
+				A8E346D28649CCDB1B46AA22 /* Sources */,
+				C604ADEA245959CD5514FF08 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1E73DE8A138FBCDDDEC413A3 /* PBXTargetDependency */,
+			);
+			name = ZavaRetailTests;
+			packageProductDependencies = (
+			);
+			productName = ZavaRetailTests;
+			productReference = 83FAEC32AEE91ABC779057B0 /* ZavaRetailTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		38BA8A217D84D16BC6CBE41E /* ZavaRetail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 73830D75C7F9B1D435939D44 /* Build configuration list for PBXNativeTarget "ZavaRetail" */;
+			buildPhases = (
+				241FA7282D7A1091630ABF80 /* Generate Env.swift */,
+				120ABB57D57E451D493E7D1E /* SwiftLint */,
+				A3708BF41E3F37B25BB06B78 /* Sources */,
+				877A2AF44A9247A4A84469B8 /* Resources */,
+				B3D8420A4EF638B0A5A725D7 /* Frameworks */,
+				EA425C93DA4C4B29045937AC /* Embed DittoSwift.framework (macOS) */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZavaRetail;
+			packageProductDependencies = (
+				C3E9BC59B6001BA0D47C55FD /* Anvil */,
+				0D37594324DFE347046A4322 /* DittoSwift */,
+				2525B5C90EC10C7BA1FEC712 /* DittoAllToolsMenu */,
+			);
+			productName = ZavaRetail;
+			productReference = 5DA2DAD735B3100561CF647A /* ZavaRetail.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DB11FAE6F48EB56EB4363582 /* ZavaRetailUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 95AD754CB05779429214A355 /* Build configuration list for PBXNativeTarget "ZavaRetailUITests" */;
+			buildPhases = (
+				DBC4CD5A81DBD0935AE18C39 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C7E9ADD48972C15C2983FD63 /* PBXTargetDependency */,
+			);
+			name = ZavaRetailUITests;
+			packageProductDependencies = (
+			);
+			productName = ZavaRetailUITests;
+			productReference = 0769C5D5A846035657382E35 /* ZavaRetailUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1D5AF444D7DA5E8813CB73EF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					08DBA7E793173806493DE39A = {
+						ProvisioningStyle = Automatic;
+					};
+					38BA8A217D84D16BC6CBE41E = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					DB11FAE6F48EB56EB4363582 = {
+						ProvisioningStyle = Automatic;
+						TestTargetID = 38BA8A217D84D16BC6CBE41E;
+					};
+				};
+			};
+			buildConfigurationList = 3BFA52E491D317CDB97F3C37 /* Build configuration list for PBXProject "ZavaRetail" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FDEA480507CBE12EA376F0CB;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0CDFB28B0ADBAF04A1BE1C6A /* XCRemoteSwiftPackageReference "DittoSwiftPackage" */,
+				A662933306E9CAE0C6215723 /* XCRemoteSwiftPackageReference "DittoSwiftTools" */,
+				B9CD7EFFA344B392E5B661A1 /* XCLocalSwiftPackageReference "../vendor/anvil/swift/Anvil" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 19EAB0A34F162835B7669C00 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				38BA8A217D84D16BC6CBE41E /* ZavaRetail */,
+				08DBA7E793173806493DE39A /* ZavaRetailTests */,
+				DB11FAE6F48EB56EB4363582 /* ZavaRetailUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		877A2AF44A9247A4A84469B8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DEB0C6015DD07AA5A62694A9 /* Assets.xcassets in Resources */,
+				22363816DD78A55814D8C4E8 /* benchmarks.json in Resources */,
+				51034206A05420538BAB3BA9 /* ibm_plex_mono_bold.ttf in Resources */,
+				62901884AEA00B67219A4B1D /* ibm_plex_mono_italic.ttf in Resources */,
+				200DCEBAF7C44013481D4513 /* ibm_plex_mono_regular.ttf in Resources */,
+				A3426949F75516E119A3DF53 /* inter_regular.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C604ADEA245959CD5514FF08 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				52CACE27D7A7578204A8F065 /* benchmarks.json in Resources */,
+				ED98885B73B196D22EDB2AD6 /* retail_samples.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		120ABB57D57E451D493E7D1E /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if command -v swiftlint >/dev/null; then\n  cd \"$SRCROOT\" && swiftlint lint --config .swiftlint.yml\nelse\n  echo \"error: SwiftLint is required (brew install swiftlint)\" && exit 1\nfi\n";
+		};
+		241FA7282D7A1091630ABF80 /* Generate Env.swift */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/buildEnv.sh",
+				"$(SRCROOT)/../.env",
+			);
+			name = "Generate Env.swift";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Generated/Env.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/buildEnv.sh\" \"$SRCROOT/../.env\" \"$SRCROOT/Generated\"\n";
+		};
+		EA425C93DA4C4B29045937AC /* Embed DittoSwift.framework (macOS) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed DittoSwift.framework (macOS)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Without this the macOS app crashes at launch: dyld can't find\n# @rpath/DittoSwift.framework (the XCFramework is dynamic).\nif [ \"$PLATFORM_NAME\" = \"macosx\" ]; then\n  SRC=\"$BUILD_DIR/../../SourcePackages/artifacts/dittoswiftpackage/DittoSwift/DittoSwift.xcframework/macos-arm64/DittoSwift.framework\"\n  DST_DIR=\"$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH\"\n  mkdir -p \"$DST_DIR\"\n  rm -rf \"$DST_DIR/DittoSwift.framework\"\n  cp -R \"$SRC\" \"$DST_DIR/\"\n  # Ad-hoc sign so the framework loads from a locally-signed app.\n  codesign --force --sign - --timestamp=none \"$DST_DIR/DittoSwift.framework\" 2>/dev/null || true\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A3708BF41E3F37B25BB06B78 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C592399AF1A109798630142 /* AppState.swift in Sources */,
+				64FD0455927E98442284DC74 /* BenchmarkCatalog.swift in Sources */,
+				90A45A71F962E23CFC843335 /* CustomersView.swift in Sources */,
+				126AFF1FA6F0C3FA07283180 /* DashboardView.swift in Sources */,
+				2034F030EF06D863FC132110 /* DatabaseConfig.swift in Sources */,
+				4E3328FFEEFF28E4EE37E423 /* DittoManager.swift in Sources */,
+				306972150A537FBE89980488 /* DittoTabView.swift in Sources */,
+				D098DA082184E7534EAA17D0 /* Env.swift in Sources */,
+				E4B134C70B8F0A9E969F0A40 /* FlowLayout.swift in Sources */,
+				A2F1D53BFCC78541B363D8DA /* FontRegistration.swift in Sources */,
+				B0157C24C1048EB23AAE2291 /* Formatters.swift in Sources */,
+				2007A35496E048EFF6A14F37 /* Models.swift in Sources */,
+				0DFE713827AC62A3139E29AD /* OrdersView.swift in Sources */,
+				AB1341A41822A3852E06BFEA /* PaginationBar.swift in Sources */,
+				2236C03AB930EFA6137B4749 /* ProductsView.swift in Sources */,
+				659E824038669D2F0B09C239 /* QueryCatalogView.swift in Sources */,
+				A2FEFD02259710CE07FF3CE5 /* QueryInfoButton.swift in Sources */,
+				2AB316E674532B7902B07EB7 /* RootView.swift in Sources */,
+				FA89A688B76793A0F1B656B2 /* SkeletonBox.swift in Sources */,
+				2CA68AEA2811064D2EEDC068 /* StorePickerView.swift in Sources */,
+				5CB0FCB855B85CF29853B36A /* ZavaRetailApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A8E346D28649CCDB1B46AA22 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				92F85C758D7529F3E178C4BA /* ModelContractTests.swift in Sources */,
+				811E8C78010B97729807D729 /* ZavaRetailLogicTests.swift in Sources */,
+				617A5EA21E4373A7B059A9B1 /* ZavaRetailTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DBC4CD5A81DBD0935AE18C39 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B93FD0ACF9CE7830D63BD063 /* QueryRunnerUITests.swift in Sources */,
+				AF5D824C7FAAE9151DD343B7 /* StoreSwitchUITests.swift in Sources */,
+				D373FEA70E8E17F76E92A82C /* TabTourUITests.swift in Sources */,
+				C983758D0688AA219B16AAE4 /* ZavaRetailUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1E73DE8A138FBCDDDEC413A3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 38BA8A217D84D16BC6CBE41E /* ZavaRetail */;
+			targetProxy = 6D20CD11CE1C96752C414A34 /* PBXContainerItemProxy */;
+		};
+		C7E9ADD48972C15C2983FD63 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 38BA8A217D84D16BC6CBE41E /* ZavaRetail */;
+			targetProxy = 9AB64D254FFD9AD83F3927E5 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4D3C95D3ECA26C11B7018E94 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ZavaRetail/Info.plist;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;
+				PRODUCT_NAME = ZavaRetail;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5919A6D14E0DAAF567BBF31F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava.ZavaRetailUITests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ZavaRetail;
+			};
+			name = Debug;
+		};
+		64450EC5F7EA6F6409CA2B85 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		907BB131C43ED172ABC38F92 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava.ZavaRetailTests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ZavaRetail.app/ZavaRetail";
+			};
+			name = Release;
+		};
+		93FA6FAAB2563453B8149257 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ZavaRetail/Info.plist;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;
+				PRODUCT_NAME = ZavaRetail;
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B69E3970775B932B09FB6243 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		BF248DB4785DF273609505C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava.ZavaRetailUITests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ZavaRetail;
+			};
+			name = Release;
+		};
+		EC762375E7A2859051B23DE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava.ZavaRetailTests;
+				SDKROOT = iphoneos;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ZavaRetail.app/ZavaRetail";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3BFA52E491D317CDB97F3C37 /* Build configuration list for PBXProject "ZavaRetail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				64450EC5F7EA6F6409CA2B85 /* Debug */,
+				B69E3970775B932B09FB6243 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		73830D75C7F9B1D435939D44 /* Build configuration list for PBXNativeTarget "ZavaRetail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D3C95D3ECA26C11B7018E94 /* Debug */,
+				93FA6FAAB2563453B8149257 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		95AD754CB05779429214A355 /* Build configuration list for PBXNativeTarget "ZavaRetailUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5919A6D14E0DAAF567BBF31F /* Debug */,
+				BF248DB4785DF273609505C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D451E9FF440E702A636A2054 /* Build configuration list for PBXNativeTarget "ZavaRetailTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EC762375E7A2859051B23DE6 /* Debug */,
+				907BB131C43ED172ABC38F92 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B9CD7EFFA344B392E5B661A1 /* XCLocalSwiftPackageReference "../vendor/anvil/swift/Anvil" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../vendor/anvil/swift/Anvil;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0CDFB28B0ADBAF04A1BE1C6A /* XCRemoteSwiftPackageReference "DittoSwiftPackage" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getditto/DittoSwiftPackage";
+			requirement = {
+				kind = exactVersion;
+				version = 5.1.0;
+			};
+		};
+		A662933306E9CAE0C6215723 /* XCRemoteSwiftPackageReference "DittoSwiftTools" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getditto/DittoSwiftTools";
+			requirement = {
+				kind = exactVersion;
+				version = 10.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0D37594324DFE347046A4322 /* DittoSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0CDFB28B0ADBAF04A1BE1C6A /* XCRemoteSwiftPackageReference "DittoSwiftPackage" */;
+			productName = DittoSwift;
+		};
+		2525B5C90EC10C7BA1FEC712 /* DittoAllToolsMenu */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A662933306E9CAE0C6215723 /* XCRemoteSwiftPackageReference "DittoSwiftTools" */;
+			productName = DittoAllToolsMenu;
+		};
+		C3E9BC59B6001BA0D47C55FD /* Anvil */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Anvil;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 1D5AF444D7DA5E8813CB73EF /* Project object */;
+}

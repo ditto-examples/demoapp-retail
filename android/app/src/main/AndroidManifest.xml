@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- M0 spike state. M2 grows this skeleton into the real app (PLAN §4):
+         - INTERNET permission is declared below (Big Peer sync needs it);
+           Ditto's P2P transport permissions (BLUETOOTH*, location, local
+           network) are manifest-merged by the Ditto SDK itself.
+         - android:icon is a placeholder system drawable — replace with real
+           adaptive icons.
+         - The platform theme is temporary; M2 adds a proper Anvil-based
+           theme/splash handling. -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:label="Zava Retail"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ZavaRetail">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

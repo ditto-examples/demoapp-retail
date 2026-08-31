@@ -34,6 +34,7 @@ Nearest-file rule: this file wins over the root AGENTS.md for work in `swift/`.
 | UI tests (live Big Peer) | `make test-ui` |
 | Coverage gate | `make coverage` |
 | Dead code | `make periphery` |
+| Regenerate app icon | `make icon` (scripts/make_icon.swift — citrus field + neutral950 bag, self-checking render) |
 
 ## Conventions
 

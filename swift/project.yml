@@ -105,6 +105,9 @@ targets:
         INFOPLIST_FILE: ZavaRetail/Info.plist
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # App icon: ZavaRetail/Assets.xcassets/AppIcon.appiconset (regenerate
+        # the artwork with `make icon`).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # NO because the SwiftLint build phase reads the whole source tree
         # (sandbox grants only declared paths). The Env phase keeps declared
         # input/output files, so it stays sandbox-correct regardless.

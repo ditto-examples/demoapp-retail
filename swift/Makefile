@@ -26,6 +26,15 @@ format-check:
 periphery:
 	periphery scan --project ZavaRetail.xcodeproj --schemes ZavaRetail --disable-update-check -- -destination '$(SIM)'
 
+# Regenerate the app icon (citrus field + neutral950 bag glyph; the script
+# self-checks the render) and all icon-set slot sizes.
+icon:
+	swift scripts/make_icon.swift ZavaRetail/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+	for s in 16 32 64 128 256 512; do \
+		sips -z $$s $$s ZavaRetail/Assets.xcassets/AppIcon.appiconset/icon-1024.png \
+			--out ZavaRetail/Assets.xcassets/AppIcon.appiconset/icon-$$s.png >/dev/null; \
+	done
+
 # --- Build & test ---
 build: setup
 	xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination '$(SIM)' build
@@ -33,8 +42,11 @@ build: setup
 # Build + run the macOS app from a STABLE location (swift/dist/). Never run
 # the .app straight out of DerivedData: builds replace that bundle in place,
 # and launching it mid-build crashes on a half-copied DittoSwift.framework.
+# The pkill matters: `open` on an already-running app only brings it to the
+# front — without killing first you'd keep looking at the PREVIOUS build.
 run-mac:
 	xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO
+	-pkill -x ZavaRetail
 	rm -rf dist/ZavaRetail.app
 	mkdir -p dist
 	BUILD_DIR=$$(xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -showBuildSettings -destination 'platform=macOS' 2>/dev/null | grep -m1 ' BUILD_DIR ' | awk '{print $$3}') && \

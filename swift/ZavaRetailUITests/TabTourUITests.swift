@@ -16,6 +16,15 @@ final class TabTourUITests: XCTestCase {
 
         assertLowStockCard(app: app)
 
+        // KPI values must render on ONE line (regression: the revenue figure
+        // bled to a second line). Two .title lines are ~70pt tall; one is ~34.
+        let revenue = app.staticTexts["kpi.revenue"]
+        XCTAssertTrue(revenue.waitForExistence(timeout: 60))
+        XCTAssertLessThanOrEqual(
+            revenue.frame.height, 45,
+            "revenue KPI wrapped to multiple lines (frame height \(revenue.frame.height))"
+        )
+
         // --- Orders: list renders, detail shows the two-query line items ---
         app.tabBars.buttons["Orders"].tap()
         let ordersTable = app.collectionViews.firstMatch

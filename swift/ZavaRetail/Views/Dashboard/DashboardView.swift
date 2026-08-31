@@ -381,6 +381,11 @@ private struct KpiCard: View {
                     .font(.title)
                     .fontWeight(.semibold)
                     .foregroundStyle(colors.foregroundNormal)
+                    // KPI values must never wrap ("$19,513,528.40" bleeding to
+                    // a second line) — shrink to fit instead; the cards have
+                    // ample width.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .accessibilityIdentifier(identifier ?? "")
                 Spacer(minLength: 0)
             }

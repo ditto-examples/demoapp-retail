@@ -39,7 +39,33 @@ struct QueryInfoSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        // No NavigationStack/toolbar — on macOS sheets a toolbar renders as a
+        // large bottom footer bar (and .automatic puts items lower-left).
+        // The header row below gives the exact "title + upper-right X" chrome
+        // on every platform.
+        VStack(spacing: 0) {
+            HStack {
+                Text("About this data")
+                    .font(.headline)
+                    .foregroundStyle(colors.foregroundNormal)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(colors.foregroundSubtle)
+                        .frame(minWidth: 32, minHeight: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("queryInfo.close")
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(colors.surface)
+            Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -72,35 +98,10 @@ struct QueryInfoSheet: View {
                     """)
                     .font(.callout)
                     .foregroundStyle(colors.foregroundSubtle)
-
-                    HStack {
-                        Spacer()
-                        AnvilButton("Close", variant: .secondary, size: .sm) {
-                            dismiss()
-                        }
-                    }
-                    .padding(.top, 8)
                 }
                 .padding()
             }
             .background(colors.background)
-            .navigationTitle("About this data")
-            .toolbar {
-                // Upper-right X — same dismiss as the Close button.
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundStyle(colors.foregroundSubtle)
-                            .frame(minWidth: 32, minHeight: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close")
-                }
-            }
         }
     }
 }

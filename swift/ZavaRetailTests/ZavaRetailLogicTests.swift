@@ -236,6 +236,30 @@ final class ZavaRetailLogicTests: XCTestCase {
         XCTAssertNil(QueryPreparation.evictCleanup(entry: e) { $0 })
     }
 
+    // MARK: - Paging (LIMIT/OFFSET math)
+
+    func testPagingQueryBuildsLimitOffset() {
+        let query = Paging.pageQuery(
+            base: "SELECT * FROM orders WHERE deleted = false",
+            orderBy: "order_date DESC, _id DESC",
+            page: 3,
+            pageSize: 25
+        )
+        XCTAssertEqual(
+            query,
+            "SELECT * FROM orders WHERE deleted = false ORDER BY order_date DESC, _id DESC LIMIT 25 OFFSET 50"
+        )
+    }
+
+    func testPagingCountsAndClamps() {
+        XCTAssertEqual(Paging.pageCount(total: 0, pageSize: 25), 1)
+        XCTAssertEqual(Paging.pageCount(total: 25, pageSize: 25), 1)
+        XCTAssertEqual(Paging.pageCount(total: 26, pageSize: 25), 2)
+        XCTAssertEqual(Paging.pageCount(total: 24921, pageSize: 25), 997)
+        XCTAssertEqual(Paging.clampPage(5000, total: 100, pageSize: 25), 4)
+        XCTAssertEqual(Paging.clampPage(-3, total: 100, pageSize: 25), 1)
+    }
+
     // MARK: - Screen state pure logic
 
     func testOrdersCutoffAnchorsToDataNotClock() {
@@ -247,76 +271,41 @@ final class ZavaRetailLogicTests: XCTestCase {
     }
 
     @MainActor
-    func testProductsLowStockFilter() {
+    func testProductsVisibleRowsPrefersSearchResults() {
         let state = ProductsState()
-        let inStock = Product(
-            _id: "p1",
-            product_id: "p1",
-            sku: "A-1",
-            product_name: "Hammer",
-            category_id: "cat",
-            cost: 1,
-            base_price: 2,
-            gross_margin_percent: 50,
+        let paged = Product(
+            _id: "p1", product_id: "p1", sku: "A-1", product_name: "Hammer",
+            category_id: "cat", cost: 1, base_price: 2, gross_margin_percent: 50,
             deleted: false
         )
-        let low = Product(
-            _id: "p2",
-            product_id: "p2",
-            sku: "A-2",
-            product_name: "Nail",
-            category_id: "cat",
-            cost: 1,
-            base_price: 2,
-            gross_margin_percent: 50,
+        let found = Product(
+            _id: "p2", product_id: "p2", sku: "A-2", product_name: "Nail",
+            category_id: "cat", cost: 1, base_price: 2, gross_margin_percent: 50,
             deleted: false
         )
-        state.products = [inStock, low]
-        state.stockByProduct = [
-            "p2": InventoryItem(
-                _id: .init(store_id: "store_a", product_id: "p2"),
-                store_id: "store_a", product_id: "p2", stock_level: 2,
-                location: .init(aisle: "1", shelf: "A", bin: "1"),
-                last_counted: nil, notes: nil, deleted: false
-            )
-        ]
-        XCTAssertEqual(state.visibleProducts.count, 2)
-        state.lowStockOnly = true
-        XCTAssertEqual(state.visibleProducts.map(\.sku), ["A-2"])
+        state.rows = [.init(product: paged, stock: nil)]
+        XCTAssertEqual(state.visibleRows.map(\.product.sku), ["A-1"])
+        state.searchResults = [found]
+        XCTAssertTrue(state.isSearching)
+        XCTAssertEqual(state.visibleRows.map(\.product.sku), ["A-2"])
+        state.searchResults = nil
+        XCTAssertEqual(state.visibleRows.map(\.product.sku), ["A-1"])
     }
 
-    @MainActor
-    func testCustomersStoreFilter() {
-        let appState = AppState()
-        appState.selectedStoreId = "store_a"
-        defer { appState.selectedStoreId = nil }
-
-        let state = CustomersState()
-        let a = Customer(
-            _id: "1",
-            customer_id: "1",
-            first_name: "A",
-            last_name: "One",
-            email: "a@x.io",
-            phone: nil,
-            primary_store_id: "store_a",
-            created_at: "",
-            deleted: false
+    func testCustomersStoreFilterQueryChoice() {
+        XCTAssertEqual(
+            CustomersState.whereClause(thisStoreOnly: true, storeId: "store_a"),
+            CustomersState.storeWhere,
+            "filtered mode must use the query-side primary_store_id filter"
         )
-        let b = Customer(
-            _id: "2",
-            customer_id: "2",
-            first_name: "B",
-            last_name: "Two",
-            email: "b@x.io",
-            phone: nil,
-            primary_store_id: "store_b",
-            created_at: "",
-            deleted: false
+        XCTAssertEqual(
+            CustomersState.whereClause(thisStoreOnly: false, storeId: "store_a"),
+            CustomersState.directoryWhere
         )
-        state.customers = [a, b]
-        XCTAssertEqual(state.visibleCustomers(appState: appState).count, 2)
-        state.thisStoreOnly = true
-        XCTAssertEqual(state.visibleCustomers(appState: appState).map(\.email), ["a@x.io"])
+        // No store selected yet: never emit a dangling :storeId filter
+        XCTAssertEqual(
+            CustomersState.whereClause(thisStoreOnly: true, storeId: nil),
+            CustomersState.directoryWhere
+        )
     }
 }

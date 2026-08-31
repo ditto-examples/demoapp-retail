@@ -139,6 +139,28 @@ struct OrderItem: Sendable, Codable, Identifiable, Equatable {
     }
 }
 
+/// Single-row shape of `SELECT COUNT(*) AS count …` queries.
+struct CountRow: Sendable, Decodable {
+    let count: Int
+}
+
+/// Page math for the list screens (pure — unit-tested). DQL supports
+/// `LIMIT … OFFSET …`; the ints come from our own controls and are
+/// interpolated into the query string (never user text).
+enum Paging {
+    static func pageQuery(base: String, orderBy: String, page: Int, pageSize: Int) -> String {
+        "\(base) ORDER BY \(orderBy) LIMIT \(pageSize) OFFSET \((page - 1) * pageSize)"
+    }
+
+    static func pageCount(total: Int, pageSize: Int) -> Int {
+        max(1, Int(ceil(Double(total) / Double(pageSize))))
+    }
+
+    static func clampPage(_ page: Int, total: Int, pageSize: Int) -> Int {
+        min(max(1, page), pageCount(total: total, pageSize: pageSize))
+    }
+}
+
 /// Row shape of `system:data_sync_info` (the sync status virtual collection).
 struct SyncStatusInfo: Sendable, Equatable, Identifiable {
     let id: String

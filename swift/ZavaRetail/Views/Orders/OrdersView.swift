@@ -3,32 +3,35 @@ import DittoSwift
 import OSLog
 import SwiftUI
 
-/// The orders list is a live store observer (PLAN §4.2.2). The "recent"
-/// filter anchors to max(order_date) in the local store — the dataset ends
-/// 2025-06-27, so a device-clock-relative filter would show zero rows.
+/// The orders list is a live, PAGED store observer (PLAN §4.2.2): the page
+/// slice is `ORDER BY order_date DESC LIMIT pageSize OFFSET (page-1)*pageSize`
+/// and the total comes from a COUNT observer — both live-update as sync runs.
+/// The "recent" filter anchors to max(order_date) in the local store — the
+/// dataset ends 2025-06-27, so a device-clock-relative filter would show
+/// zero rows.
 @MainActor
 @Observable
 final class OrdersState {
     var orders: [Order] = []
+    var totalCount = 0
+    var page = 1
+    var pageSize = 25
     var recentOnly = false
-    var limit = 100
     var error: String?
 
-    private var observer: DittoStoreObserver?
+    private var pageObserver: DittoStoreObserver?
+    private var countObserver: DittoStoreObserver?
     /// Restart serialization: every restart cancels and awaits the in-flight
-    /// one, so rapid filter changes can't leave two observers alive (M7).
+    /// one, so rapid filter/page changes can't leave two observers alive.
     private var restartTask: Task<Void, Never>?
 
     private struct MaxDateRow: Sendable, Decodable {
         let max_date: String?
     }
 
-    static let baseQuery = """
-    SELECT * FROM orders WHERE store_id = :storeId AND deleted = false
-    """
+    static let baseWhere = "FROM orders WHERE store_id = :storeId AND deleted = false"
 
-    /// Non-blocking restart entry point for view events: serializes against
-    /// any in-flight restart so two rapid changes can't interleave.
+    /// Non-blocking restart entry point for view events (serializes).
     func restart(appState: AppState) {
         let previous = restartTask
         restartTask = Task {
@@ -39,25 +42,47 @@ final class OrdersState {
     }
 
     private func restartNow(appState: AppState) async {
-        // Not stop(): stop() also cancels restartTask — which is US.
-        observer?.cancel()
-        observer = nil
+        pageObserver?.cancel()
+        countObserver?.cancel()
+        pageObserver = nil
+        countObserver = nil
         guard let storeId = appState.selectedStoreId else { return }
 
-        var query = Self.baseQuery
+        var whereClause = Self.baseWhere
         var arguments: [String: Sendable] = ["storeId": storeId]
         if recentOnly,
            let maxDate = await latestOrderDate(storeId: storeId),
            let cutoff = Self.cutoffDate(from: maxDate, days: 30)
         {
-            query += " AND order_date > :cutoff"
+            whereClause += " AND order_date > :cutoff"
             arguments["cutoff"] = cutoff
         }
-        // LIMIT is interpolated (Int from our own stepper — never user text).
-        query += " ORDER BY order_date DESC LIMIT \(limit)"
+
+        // Unique tiebreaker: OFFSET paging over a non-unique key can skip or
+        // repeat rows across pages.
+        let pageQuery = Paging.pageQuery(
+            base: "SELECT * \(whereClause)",
+            orderBy: "order_date DESC, _id DESC",
+            page: page,
+            pageSize: pageSize
+        )
+        let countQuery = "SELECT COUNT(*) AS count \(whereClause)"
 
         do {
-            observer = try await DittoManager.shared.observe(query, arguments: arguments, as: Order.self) { [weak self] orders in
+            countObserver = try await DittoManager.shared.observe(
+                countQuery, arguments: arguments, as: CountRow.self
+            ) { [weak self] rows in
+                guard let self else { return }
+                totalCount = rows.first?.count ?? 0
+                let clamped = Paging.clampPage(page, total: totalCount, pageSize: pageSize)
+                if clamped != page {
+                    page = clamped
+                    restart(appState: appState)
+                }
+            }
+            pageObserver = try await DittoManager.shared.observe(
+                pageQuery, arguments: arguments, as: Order.self
+            ) { [weak self] orders in
                 self?.orders = orders
             }
             error = nil
@@ -69,8 +94,10 @@ final class OrdersState {
     }
 
     func stop() {
-        observer?.cancel()
-        observer = nil
+        pageObserver?.cancel()
+        countObserver?.cancel()
+        pageObserver = nil
+        countObserver = nil
         restartTask?.cancel()
         restartTask = nil
     }
@@ -106,24 +133,38 @@ struct OrdersView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if state.orders.isEmpty {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("Syncing orders for this store…")
-                            .foregroundStyle(colors.foregroundSubtle)
-                        if let error = state.error {
-                            AnvilBadge(error, status: .critical)
+            VStack(spacing: 0) {
+                Group {
+                    if state.orders.isEmpty {
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("Syncing orders for this store…")
+                                .foregroundStyle(colors.foregroundSubtle)
+                            if let error = state.error {
+                                AnvilBadge(error, status: .critical)
+                            }
                         }
-                    }
-                } else {
-                    List(state.orders) { order in
-                        NavigationLink(destination: OrderDetailView(order: order)) {
-                            OrderRow(order: order)
+                        .frame(maxHeight: .infinity)
+                    } else {
+                        List(state.orders) { order in
+                            NavigationLink(destination: OrderDetailView(order: order)) {
+                                OrderRow(order: order)
+                            }
                         }
+                        .listStyle(.plain)
                     }
-                    .listStyle(.plain)
                 }
+
+                Divider()
+                PaginationBar(
+                    totalCount: state.totalCount,
+                    page: $state.page,
+                    pageSize: $state.pageSize,
+                    pageSizes: [25, 50, 100, 250]
+                ) {
+                    state.restart(appState: appState)
+                }
+                .background(colors.surface)
             }
             .background(colors.background)
             .navigationTitle("Orders")
@@ -136,23 +177,15 @@ struct OrdersView: View {
                     .toggleStyle(.switch)
                     .fixedSize()
                 }
-                ToolbarItem(placement: .automatic) {
-                    Menu("Show \(state.limit)") {
-                        ForEach([50, 100, 500, 1000], id: \.self) { value in
-                            Button("\(value)") { state.limit = value }
-                        }
-                    }
-                }
             }
             .task { state.restart(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in
+                state.page = 1
                 state.restart(appState: appState)
             }
             .onChange(of: state.recentOnly) { _, _ in
-                state.restart(appState: appState)
-            }
-            .onChange(of: state.limit) { _, _ in
+                state.page = 1
                 state.restart(appState: appState)
             }
         }
@@ -222,8 +255,12 @@ struct OrderDetailView: View {
 
                 AnvilCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Line items")
-                            .font(.headline).foregroundStyle(colors.foregroundNormal)
+                        HStack {
+                            Text("Line items")
+                                .font(.headline).foregroundStyle(colors.foregroundNormal)
+                            Spacer()
+                            QueryInfoButton(query: Self.itemsQuery, explanation: Self.explanation)
+                        }
                         ForEach(items) { item in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -248,10 +285,6 @@ struct OrderDetailView: View {
                         if let error {
                             AnvilBadge(error, status: .critical)
                         }
-                        QueryCallout(query: Self.itemsQuery)
-                        Text("DQL has no JOINs: order detail = orders by _id + order_items by order_id.")
-                            .font(.caption)
-                            .foregroundStyle(colors.foregroundSubtle)
                     }
                 }
             }
@@ -266,9 +299,18 @@ struct OrderDetailView: View {
                     arguments: ["orderId": order.order_id],
                     as: OrderItem.self
                 )
+            } catch is CancellationError {
+                // View torn down mid-fetch — not an error state.
             } catch {
                 self.error = error.localizedDescription
             }
         }
     }
+
+    static let explanation = """
+    DQL v5.0 has no JOINs, so order detail is two queries: the list's live \
+    observer fetched this order, and this screen ran the second query — \
+    order_items filtered by order_id. That's the canonical DQL pattern the \
+    benchmark measures as the orders__select__by_id + order_items__select__by_order pair.
+    """
 }

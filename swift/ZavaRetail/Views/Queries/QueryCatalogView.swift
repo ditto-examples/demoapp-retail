@@ -136,44 +136,53 @@ struct QueryDetailView: View {
                     }
                 }
 
-                AnvilCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Stepper("Iterations: \(iterations)", value: $iterations, in: 1 ... 100)
-                            .foregroundStyle(colors.foregroundNormal)
-                        if isRunning {
-                            ProgressView("Running \(iterations) iterations…")
-                        } else {
-                            AnvilButton("Run benchmark") {
-                                if entry.isMutating {
-                                    showMutationConfirm = true
-                                } else {
-                                    runNow()
+                if result != nil || error != nil {
+                    AnvilCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if let result {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    resultRow("Result count", "\(result.resultCount.formatted()) rows")
+                                    resultRow("Mean", String(format: "%.2f ms", result.stats.meanMs))
+                                    resultRow("Median", String(format: "%.2f ms", result.stats.medianMs))
+                                    resultRow("p95", String(format: "%.2f ms", result.stats.p95Ms))
+                                    resultRow("Min / Max", String(format: "%.2f / %.2f ms", result.stats.minMs, result.stats.maxMs))
+                                    Text("""
+                                    \(result.iterations) timed iterations, execution only (no rendering). \
+                                    The benchmark harness uses pilot + warmup + 50 iterations; \
+                                    this screen keeps it simple.
+                                    """)
+                                    .font(.caption)
+                                    .foregroundStyle(colors.foregroundSubtle)
                                 }
                             }
-                        }
-                        if let result {
-                            VStack(alignment: .leading, spacing: 6) {
-                                resultRow("Result count", "\(result.resultCount.formatted()) rows")
-                                resultRow("Mean", String(format: "%.2f ms", result.stats.meanMs))
-                                resultRow("Median", String(format: "%.2f ms", result.stats.medianMs))
-                                resultRow("p95", String(format: "%.2f ms", result.stats.p95Ms))
-                                resultRow("Min / Max", String(format: "%.2f / %.2f ms", result.stats.minMs, result.stats.maxMs))
-                                Text("""
-                                \(result.iterations) timed iterations, execution only (no rendering). \
-                                The benchmark harness uses pilot + warmup + 50 iterations; \
-                                this screen keeps it simple.
-                                """)
-                                .font(.caption)
-                                .foregroundStyle(colors.foregroundSubtle)
+                            if let error {
+                                AnvilBadge(error, status: .critical)
                             }
-                        }
-                        if let error {
-                            AnvilBadge(error, status: .critical)
                         }
                     }
                 }
             }
             .padding()
+        }
+        // Floating run toolbar (Edge Studio pattern): iterations + Run in a
+        // glass bar docked at the bottom, always reachable while reading DQL.
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 88)
+        }
+        .overlay(alignment: .bottom) {
+            RunToolbar(
+                iterations: $iterations,
+                isRunning: isRunning,
+                isMutating: entry.isMutating
+            ) {
+                if entry.isMutating {
+                    showMutationConfirm = true
+                } else {
+                    runNow()
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
         .background(colors.background)
         .navigationTitle("Benchmark")
@@ -236,6 +245,71 @@ struct QueryDetailView: View {
             Text(value)
                 .font(.dittoCode(size: 13))
                 .foregroundStyle(colors.foregroundNormal)
+        }
+    }
+}
+
+/// Floating bottom toolbar for the benchmark screen (Edge Studio's
+/// DetailBottomBar pattern, Anvil-styled): iterations stepper + Run, docked
+/// above the content in a glass bar so it's reachable while reading the DQL.
+private struct RunToolbar: View {
+    @Binding var iterations: Int
+    let isRunning: Bool
+    let isMutating: Bool
+    let onRun: () -> Void
+
+    @Environment(\.dittoColors) private var colors
+
+    var body: some View {
+        GlassEffectContainer {
+            HStack(spacing: 16) {
+                HStack(spacing: 4) {
+                    Button {
+                        iterations = max(1, iterations - (iterations > 10 ? 10 : 1))
+                    } label: {
+                        Image(systemName: "minus")
+                            .frame(minWidth: 36, minHeight: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRunning)
+                    .accessibilityIdentifier("IterationsMinus")
+
+                    Text("×\(iterations)")
+                        .font(.dittoCode(size: 14))
+                        .foregroundStyle(colors.foregroundNormal)
+                        .frame(minWidth: 40)
+
+                    Button {
+                        iterations = min(100, iterations + (iterations >= 10 ? 10 : 1))
+                    } label: {
+                        Image(systemName: "plus")
+                            .frame(minWidth: 36, minHeight: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRunning)
+                    .accessibilityIdentifier("IterationsPlus")
+                }
+
+                Spacer()
+
+                if isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Running…")
+                        .font(.callout)
+                        .foregroundStyle(colors.foregroundSubtle)
+                } else {
+                    AnvilButton(isMutating ? "Run (writes data)" : "Run benchmark") {
+                        onRun()
+                    }
+                    .accessibilityIdentifier("RunBenchmarkButton")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .glassEffect(in: RoundedRectangle(cornerRadius: 20))
         }
     }
 }

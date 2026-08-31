@@ -1,32 +1,47 @@
 import Anvil
 import DittoSwift
+import OSLog
 import SwiftUI
 
-/// Products catalog (shared) joined in-memory with this store's inventory
-/// (per-store subscription) for stock badges — the composite-_id teaching
-/// moment lives in the detail view's location lookup.
+/// Products catalog: paged live observers over the shared catalog (400 docs),
+/// joined in-memory with this store's inventory (per-store subscription) for
+/// stock badges. Low-stock mode pages the inventory collection directly. The
+/// composite-_id teaching moment lives in the detail view's location lookup.
 @MainActor
 @Observable
 final class ProductsState {
     var categories: [Category] = []
-    var products: [Product] = []
+    var rows: [Row] = []
+    var totalCount = 0
+    var page = 1
+    var pageSize = 25
     var selectedCategoryId: String?
     var searchText = ""
     var searchResults: [Product]?
-    var stockByProduct: [String: InventoryItem] = [:]
     var lowStockOnly = false
     var error: String?
 
+    /// A row is a product plus (when stocked at this store) its inventory.
+    struct Row: Identifiable, Equatable {
+        let product: Product
+        let stock: InventoryItem?
+        var id: String {
+            product.id
+        }
+    }
+
     private var categoriesObserver: DittoStoreObserver?
-    private var productsObserver: DittoStoreObserver?
-    private var inventoryObserver: DittoStoreObserver?
-    private var searchTask: Task<Void, Never>?
+    private var productsAllObserver: DittoStoreObserver?
+    private var inventoryAllObserver: DittoStoreObserver?
+    private var pageObserver: DittoStoreObserver?
+    private var countObserver: DittoStoreObserver?
+    private var restartTask: Task<Void, Never>?
+    private var productsById: [String: Product] = [:]
     private var startedFor: String?
 
-    static let productsQuery = "SELECT * FROM products WHERE deleted = false ORDER BY product_name"
-    static let productsByCategoryQuery = """
-    SELECT * FROM products WHERE category_id = :categoryId AND deleted = false ORDER BY product_name
-    """
+    static let productsWhere = "FROM products WHERE deleted = false"
+    static let productsByCategoryWhere = "FROM products WHERE category_id = :categoryId AND deleted = false"
+    static let lowStockWhere = "FROM inventory WHERE stock_level < 5 AND deleted = false"
     static let searchQuery = """
     SELECT * FROM products WHERE deleted = false \
     AND (sku = :term OR product_name LIKE :like) ORDER BY product_name LIMIT 50
@@ -41,14 +56,23 @@ final class ProductsState {
             ) { [weak self] categories in
                 self?.categories = categories.sorted { $0.category_name < $1.category_name }
             }
-            // Inventory is already the selected store's slice (subscription) —
-            // observe it all locally and index by product for stock badges.
-            inventoryObserver = try await DittoManager.shared.observe(
+            // The full catalog (400 docs) stays resident: id → name lookups
+            // for inventory rows and the low-stock view.
+            productsAllObserver = try await DittoManager.shared.observe(
+                "SELECT * FROM products WHERE deleted = false", as: Product.self
+            ) { [weak self] products in
+                self?.productsById = Dictionary(uniqueKeysWithValues: products.map { ($0.product_id, $0) })
+            }
+            // Inventory is already the selected store's slice (subscription).
+            inventoryAllObserver = try await DittoManager.shared.observe(
                 "SELECT * FROM inventory WHERE deleted = false", as: InventoryItem.self
             ) { [weak self] items in
-                self?.stockByProduct = Dictionary(uniqueKeysWithValues: items.map { ($0.product_id, $0) })
+                guard let self else { return }
+                stockByProduct = Dictionary(uniqueKeysWithValues: items.map { ($0.product_id, $0) })
+                // Refresh badges on the visible page when stock changes.
+                rows = rows.map { Row(product: $0.product, stock: stockByProduct[$0.product.id]) }
             }
-            await reloadProducts()
+            restart(appState: appState)
         } catch is CancellationError {
             // View torn down mid-start — not an error state.
         } catch {
@@ -56,42 +80,44 @@ final class ProductsState {
         }
     }
 
+    private var stockByProduct: [String: InventoryItem] = [:]
+
     func stop() {
         categoriesObserver?.cancel()
-        productsObserver?.cancel()
-        inventoryObserver?.cancel()
+        productsAllObserver?.cancel()
+        inventoryAllObserver?.cancel()
+        pageObserver?.cancel()
+        countObserver?.cancel()
         categoriesObserver = nil
-        productsObserver = nil
-        inventoryObserver = nil
+        productsAllObserver = nil
+        inventoryAllObserver = nil
+        pageObserver = nil
+        countObserver = nil
+        restartTask?.cancel()
+        restartTask = nil
         startedFor = nil
     }
 
-    func restart(appState: AppState) async {
-        stop()
-        await start(appState: appState)
+    func restart(appState: AppState) {
+        let previous = restartTask
+        restartTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await reloadPage()
+        }
     }
 
-    func reloadProducts() async {
-        // Cancel the previous products observer FIRST — observers stay live
-        // until cancelled, and an overwritten (non-cancelled) observer keeps
-        // writing stale category results into `products` during sync storms.
-        productsObserver?.cancel()
-        productsObserver = nil
+    private func reloadPage() async {
+        pageObserver?.cancel()
+        countObserver?.cancel()
+        pageObserver = nil
+        countObserver = nil
+
         do {
-            if let categoryId = selectedCategoryId {
-                productsObserver = try await DittoManager.shared.observe(
-                    Self.productsByCategoryQuery,
-                    arguments: ["categoryId": categoryId],
-                    as: Product.self
-                ) { [weak self] products in
-                    self?.products = products
-                }
+            if lowStockOnly {
+                try await observeLowStockPage()
             } else {
-                productsObserver = try await DittoManager.shared.observe(
-                    Self.productsQuery, as: Product.self
-                ) { [weak self] products in
-                    self?.products = products
-                }
+                try await observeProductsPage()
             }
             error = nil
         } catch is CancellationError {
@@ -100,16 +126,65 @@ final class ProductsState {
         }
     }
 
-    /// One-shot search with 500 ms debounce (mflix pattern) — observers are
-    /// for live screens; search-as-you-type is a series of point queries.
+    private func observeProductsPage() async throws {
+        let whereClause: String
+        var arguments: [String: Sendable] = [:]
+        if let categoryId = selectedCategoryId {
+            whereClause = Self.productsByCategoryWhere
+            arguments["categoryId"] = categoryId
+        } else {
+            whereClause = Self.productsWhere
+        }
+        countObserver = try await DittoManager.shared.observe(
+            "SELECT COUNT(*) AS count \(whereClause)", arguments: arguments, as: CountRow.self
+        ) { [weak self] rows in
+            self?.totalCount = rows.first?.count ?? 0
+        }
+        // Unique tiebreaker: OFFSET paging over a non-unique key can skip or
+        // repeat rows across pages.
+        let pageQuery = Paging.pageQuery(
+            base: "SELECT * \(whereClause)", orderBy: "product_name, _id",
+            page: page, pageSize: pageSize
+        )
+        pageObserver = try await DittoManager.shared.observe(
+            pageQuery, arguments: arguments, as: Product.self
+        ) { [weak self] products in
+            guard let self else { return }
+            rows = products.map { Row(product: $0, stock: stockByProduct[$0.product_id]) }
+        }
+    }
+
+    private func observeLowStockPage() async throws {
+        countObserver = try await DittoManager.shared.observe(
+            "SELECT COUNT(*) AS count \(Self.lowStockWhere)", as: CountRow.self
+        ) { [weak self] rows in
+            self?.totalCount = rows.first?.count ?? 0
+        }
+        let pageQuery = Paging.pageQuery(
+            base: "SELECT * \(Self.lowStockWhere)", orderBy: "stock_level, _id",
+            page: page, pageSize: pageSize
+        )
+        pageObserver = try await DittoManager.shared.observe(
+            pageQuery, as: InventoryItem.self
+        ) { [weak self] items in
+            guard let self else { return }
+            rows = items.compactMap { item in
+                guard let product = productsById[item.product_id] else { return nil }
+                return Row(product: product, stock: item)
+            }
+        }
+    }
+
+    /// One-shot search with 500 ms debounce — observers are for live screens;
+    /// search-as-you-type is a series of point queries (first 50 matches).
     func search() {
-        searchTask?.cancel()
+        restartTask?.cancel()
         let term = searchText.trimmingCharacters(in: .whitespaces)
         if term.isEmpty {
             searchResults = nil
             return
         }
-        searchTask = Task { [weak self] in
+        restartTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             do {
@@ -126,10 +201,15 @@ final class ProductsState {
         }
     }
 
-    var visibleProducts: [Product] {
-        let base = searchResults ?? products
-        guard lowStockOnly else { return base }
-        return base.filter { (stockByProduct[$0.product_id]?.stock_level ?? .max) < 5 }
+    var isSearching: Bool {
+        searchResults != nil
+    }
+
+    var visibleRows: [Row] {
+        if let searchResults {
+            return searchResults.map { Row(product: $0, stock: stockByProduct[$0.product_id]) }
+        }
+        return rows
     }
 }
 
@@ -142,24 +222,36 @@ struct ProductsView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 controls
-                if state.visibleProducts.isEmpty {
-                    Spacer()
-                    Text(state.searchText.isEmpty ? "No products" : "No matches")
-                        .foregroundStyle(colors.foregroundSubtle)
-                    Spacer()
-                } else {
-                    List(state.visibleProducts) { product in
-                        NavigationLink(destination: ProductDetailView(
-                            product: product,
-                            stock: state.stockByProduct[product.product_id]
-                        )) {
-                            ProductRow(
-                                product: product,
-                                stock: state.stockByProduct[product.product_id]
-                            )
+
+                Group {
+                    if state.visibleRows.isEmpty {
+                        Spacer()
+                        Text(state.isSearching ? "No matches" : "No products on this page yet — sync may still be running")
+                            .foregroundStyle(colors.foregroundSubtle)
+                            .multilineTextAlignment(.center)
+                            .padding()
+                        Spacer()
+                    } else {
+                        List(state.visibleRows) { row in
+                            NavigationLink(destination: ProductDetailView(product: row.product, stock: row.stock)) {
+                                ProductRow(product: row.product, stock: row.stock)
+                            }
                         }
+                        .listStyle(.plain)
                     }
-                    .listStyle(.plain)
+                }
+
+                if !state.isSearching {
+                    Divider()
+                    PaginationBar(
+                        totalCount: state.totalCount,
+                        page: $state.page,
+                        pageSize: $state.pageSize,
+                        pageSizes: [25, 50, 100]
+                    ) {
+                        state.restart(appState: appState)
+                    }
+                    .background(colors.surface)
                 }
             }
             .background(colors.background)
@@ -167,10 +259,16 @@ struct ProductsView: View {
             .task { await state.start(appState: appState) }
             .onDisappear { state.stop() }
             .onChange(of: appState.selectedStoreId) { _, _ in
-                Task { await state.restart(appState: appState) }
+                state.stop()
+                Task { await state.start(appState: appState) }
             }
             .onChange(of: state.selectedCategoryId) { _, _ in
-                Task { await state.reloadProducts() }
+                state.page = 1
+                state.restart(appState: appState)
+            }
+            .onChange(of: state.lowStockOnly) { _, _ in
+                state.page = 1
+                state.restart(appState: appState)
             }
             .onChange(of: state.searchText) { _, _ in state.search() }
         }
@@ -179,34 +277,31 @@ struct ProductsView: View {
     private var controls: some View {
         VStack(spacing: 10) {
             AnvilInput(placeholder: "Search name or SKU…", text: $state.searchText)
-            ScrollView(.horizontal) {
-                HStack(spacing: 8) {
-                    CategoryChip(title: "All", isSelected: state.selectedCategoryId == nil) {
-                        state.selectedCategoryId = nil
-                    }
-                    ForEach(state.categories) { category in
-                        CategoryChip(
-                            title: category.category_name,
-                            isSelected: state.selectedCategoryId == category.category_id
-                        ) {
-                            state.selectedCategoryId = category.category_id
-                        }
+            // Flow layout so chips WRAP instead of clipping on narrow windows
+            // (macOS resize, iPad split view).
+            FlowLayout {
+                CategoryChip(title: "All", isSelected: state.selectedCategoryId == nil && !state.lowStockOnly) {
+                    state.selectedCategoryId = nil
+                    state.lowStockOnly = false
+                }
+                ForEach(state.categories) { category in
+                    CategoryChip(
+                        title: category.category_name,
+                        isSelected: state.selectedCategoryId == category.category_id && !state.lowStockOnly
+                    ) {
+                        state.selectedCategoryId = category.category_id
+                        state.lowStockOnly = false
                     }
                 }
-                .padding(.vertical, 2)
+                CategoryChip(title: "⚠ Low stock", isSelected: state.lowStockOnly) {
+                    state.lowStockOnly = true
+                    state.selectedCategoryId = nil
+                }
             }
-            .contentMargins(.horizontal, 0)
-            Toggle(isOn: $state.lowStockOnly) {
-                Text("Low stock only (this store)")
-                    .font(.callout)
-                    .foregroundStyle(colors.foregroundSubtle)
-            }
-            .toggleStyle(.switch)
-            .fixedSize()
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
         .padding(.top, 8)
+        .padding(.bottom, 8)
     }
 }
 
@@ -266,12 +361,18 @@ private struct ProductRow: View {
 struct ProductDetailView: View {
     let product: Product
     let stock: InventoryItem?
-    @Environment(AppState.self) private var appState
     @Environment(\.dittoColors) private var colors
 
     static let locationQuery = """
     SELECT * FROM inventory \
     WHERE _id.store_id = :storeId AND _id.product_id = :productId AND deleted = false
+    """
+
+    static let explanation = """
+    inventory._id is a composite key {store_id, product_id}. This query filters on \
+    its subfields to find the shelf location (aisle/shelf/bin) of a product at your \
+    store — the worker-app "find it on the shelf" pattern from the benchmark. \
+    Composite-subfield queries need an explicit index (the app creates zava_inventory_store).
     """
 
     var body: some View {
@@ -298,8 +399,12 @@ struct ProductDetailView: View {
 
                 AnvilCard {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Stock at this store")
-                            .font(.headline).foregroundStyle(colors.foregroundNormal)
+                        HStack {
+                            Text("Stock at this store")
+                                .font(.headline).foregroundStyle(colors.foregroundNormal)
+                            Spacer()
+                            QueryInfoButton(query: Self.locationQuery, explanation: Self.explanation)
+                        }
                         if let stock {
                             HStack {
                                 AnvilBadge(
@@ -315,10 +420,6 @@ struct ProductDetailView: View {
                             Text("Not stocked at this store.")
                                 .foregroundStyle(colors.foregroundSubtle)
                         }
-                        QueryCallout(query: Self.locationQuery)
-                        Text("inventory._id is a composite key {store_id, product_id} — this query filters on its subfields.")
-                            .font(.caption)
-                            .foregroundStyle(colors.foregroundSubtle)
                     }
                 }
             }

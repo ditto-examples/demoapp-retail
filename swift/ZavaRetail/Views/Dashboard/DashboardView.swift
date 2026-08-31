@@ -52,9 +52,7 @@ struct MonthTrendRow: Sendable, Decodable, Identifiable {
     }
 }
 
-struct CountRow: Sendable, Decodable {
-    let count: Int
-}
+// CountRow lives in Models.swift (shared by the paged list screens).
 
 struct TopProductRow: Sendable, Decodable, Identifiable {
     let product_id: String
@@ -188,17 +186,21 @@ struct DashboardView: View {
     }
 
     private var kpiGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
+        // Uniform cards: every card fills its grid cell so the pair renders
+        // at identical height and width regardless of content length.
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
             KpiCard(
                 title: "Orders",
                 value: "\(totalOrders.formatted())",
                 query: DashboardQueries.statusRevenue,
+                explanation: Explanations.statusRevenue,
                 identifier: "kpi.orders"
             )
             KpiCard(
                 title: "Revenue (all time)",
                 value: Formatters.usd(totalRevenue),
                 query: DashboardQueries.statusRevenue,
+                explanation: Explanations.statusRevenue,
                 identifier: "kpi.revenue"
             )
         }
@@ -207,8 +209,12 @@ struct DashboardView: View {
     private var trendCard: some View {
         AnvilCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Monthly trend")
-                    .font(.headline).foregroundStyle(colors.foregroundNormal)
+                HStack {
+                    Text("Monthly trend")
+                        .font(.headline).foregroundStyle(colors.foregroundNormal)
+                    Spacer()
+                    QueryInfoButton(query: DashboardQueries.monthlyTrend, explanation: Explanations.monthlyTrend)
+                }
                 let maxOrders = max(1, state.monthRows.map(\.orders).max() ?? 1)
                 ForEach(state.monthRows) { row in
                     HStack {
@@ -232,7 +238,6 @@ struct DashboardView: View {
                     Text("No orders synced yet for this store.")
                         .foregroundStyle(colors.foregroundSubtle)
                 }
-                QueryCallout(query: DashboardQueries.monthlyTrend)
             }
         }
     }
@@ -250,8 +255,8 @@ struct DashboardView: View {
                             status: count > 0 ? .warning : .success
                         )
                     }
+                    QueryInfoButton(query: DashboardQueries.lowStock, explanation: Explanations.lowStock)
                 }
-                QueryCallout(query: DashboardQueries.lowStock)
             }
         }
     }
@@ -259,8 +264,12 @@ struct DashboardView: View {
     private var topProductsCard: some View {
         AnvilCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Top products by revenue")
-                    .font(.headline).foregroundStyle(colors.foregroundNormal)
+                HStack {
+                    Text("Top products by revenue")
+                        .font(.headline).foregroundStyle(colors.foregroundNormal)
+                    Spacer()
+                    QueryInfoButton(query: DashboardQueries.topProducts, explanation: Explanations.topProducts)
+                }
                 ForEach(state.topProducts) { row in
                     HStack {
                         Text(row.product_id)
@@ -276,32 +285,63 @@ struct DashboardView: View {
                     Text("No sales yet for this store.")
                         .foregroundStyle(colors.foregroundSubtle)
                 }
-                QueryCallout(query: DashboardQueries.topProducts)
             }
         }
     }
+}
+
+/// Plain-language explanations for the info sheets (QueryInfoButton) — written
+/// for people new to DQL, not for the benchmark authors.
+private enum Explanations {
+    static let statusRevenue = """
+    Counts this store's non-deleted orders and sums their totals, grouped by \
+    status. It's the benchmark's by-status aggregation scoped to your store — \
+    the same DQL shape the performance suite measures.
+    """
+    static let monthlyTrend = """
+    Groups this store's orders into calendar months with substr(order_date, 0, 7) \
+    (DQL's substr is zero-based — a classic gotcha) and shows the latest 12. \
+    One of the heavier aggregation queries in the benchmark.
+    """
+    static let lowStock = """
+    Counts inventory rows at your store with fewer than 5 units left. The store \
+    filter rides the composite _id subfield (_id.store_id) — the benchmark's \
+    index-backed "low stock alert" query.
+    """
+    static let topProducts = """
+    Sums line totals per product across this store's order items and takes the \
+    top 5 by revenue. DQL v5.0 has no JOINs, so the query projects product_id \
+    only (group keys + aggregates — nothing else is allowed in a GROUP BY).
+    """
 }
 
 private struct KpiCard: View {
     let title: String
     let value: String
     let query: String
+    let explanation: String
     var identifier: String?
     @Environment(\.dittoColors) private var colors
 
     var body: some View {
         AnvilCard {
             VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(colors.foregroundSubtle)
+                HStack {
+                    Text(title)
+                        .font(.subheadline)
+                        .foregroundStyle(colors.foregroundSubtle)
+                    Spacer()
+                    QueryInfoButton(query: query, explanation: explanation)
+                }
                 Text(value)
                     .font(.title)
                     .fontWeight(.semibold)
                     .foregroundStyle(colors.foregroundNormal)
                     .accessibilityIdentifier(identifier ?? "")
-                QueryCallout(query: query)
+                Spacer(minLength: 0)
             }
+            // Fill the grid cell so Orders and Revenue render at identical size.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 }

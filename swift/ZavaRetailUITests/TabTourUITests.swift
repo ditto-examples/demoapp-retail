@@ -14,6 +14,8 @@ final class TabTourUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Dashboard"].waitForExistence(timeout: 60))
 
+        assertLowStockCard(app: app)
+
         // --- Orders: list renders, detail shows the two-query line items ---
         app.tabBars.buttons["Orders"].tap()
         let ordersTable = app.collectionViews.firstMatch
@@ -56,6 +58,25 @@ final class TabTourUITests: XCTestCase {
         }
 
         tourDittoTab(app: app)
+    }
+
+    /// Dashboard low-stock card: Seattle has 64 SKUs under 5 units — badge
+    /// and row list must render (regression test for "shows nothing").
+    private func assertLowStockCard(app: XCUIApplication) {
+        let lowStockBadge = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'under 5 units' OR label == 'No low stock found'")
+        ).firstMatch
+        XCTAssertTrue(
+            lowStockBadge.waitForExistence(timeout: 120),
+            "the low-stock card should render a badge (count or empty state)"
+        )
+        let lowStockRow = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'left' OR label == 'out'")
+        ).firstMatch
+        XCTAssertTrue(
+            lowStockRow.waitForExistence(timeout: 60),
+            "the low-stock card should list the most critical SKUs"
+        )
     }
 
     /// Ditto tab: system views render (sync status, indexes incl. the app's

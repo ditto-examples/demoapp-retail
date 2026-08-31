@@ -24,6 +24,11 @@ enum DashboardQueries {
     static let lowStock = """
     SELECT COUNT(*) AS count FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false
     """
+    /// The rows behind the count — the card lists the most critical SKUs.
+    static let lowStockItems = """
+    SELECT * FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false \
+    ORDER BY stock_level LIMIT 5
+    """
     /// Verbatim order_items__aggregation__top_products_by_revenue (the
     /// benchmark projects ONLY group keys + aggregates — DQL rejects
     /// projecting product_name here: "must depend only on group keys or
@@ -68,6 +73,7 @@ final class DashboardState {
     var statusRows: [StatusRevenueRow] = []
     var monthRows: [MonthTrendRow] = []
     var lowStockCount: Int?
+    var lowStockItems: [InventoryItem] = []
     var topProducts: [TopProductRow] = []
     var isLoading = false
     var error: String?
@@ -90,12 +96,16 @@ final class DashboardState {
             async let lowStock: [CountRow] = DittoManager.shared.fetch(
                 DashboardQueries.lowStock, arguments: ["storeId": storeId], as: CountRow.self
             )
+            async let lowStockRows: [InventoryItem] = DittoManager.shared.fetch(
+                DashboardQueries.lowStockItems, arguments: ["storeId": storeId], as: InventoryItem.self
+            )
             async let top: [TopProductRow] = DittoManager.shared.fetch(
                 DashboardQueries.topProducts, arguments: ["storeId": storeId], as: TopProductRow.self
             )
             statusRows = try await status.sorted { $0.orders > $1.orders }
             monthRows = try await months
             lowStockCount = try await lowStock.first?.count
+            lowStockItems = try await lowStockRows
             topProducts = try await top
             loadedFor = storeId
             let summary = "dashboard refresh for \(storeId): \(statusRows.count) status rows, "
@@ -244,18 +254,52 @@ struct DashboardView: View {
 
     private var lowStockCard: some View {
         AnvilCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("Low stock")
                         .font(.headline).foregroundStyle(colors.foregroundNormal)
                     Spacer()
                     if let count = state.lowStockCount {
                         AnvilBadge(
-                            "\(count) SKU\(count == 1 ? "" : "s") under 5 units",
+                            count == 0 ? "No low stock found" : "\(count) SKU\(count == 1 ? "" : "s") under 5 units",
                             status: count > 0 ? .warning : .success
                         )
+                        .accessibilityIdentifier("lowStock.badge")
                     }
                     QueryInfoButton(query: DashboardQueries.lowStock, explanation: Explanations.lowStock)
+                }
+
+                // The rows behind the count — a card that only says "64" is
+                // useless on the floor; show the most critical SKUs.
+                if let count = state.lowStockCount {
+                    if count == 0 {
+                        Text("Everything at this store has 5+ units on hand.")
+                            .font(.callout)
+                            .foregroundStyle(colors.foregroundSubtle)
+                    } else {
+                        ForEach(state.lowStockItems) { item in
+                            HStack {
+                                Text(item.product_id)
+                                    .font(.dittoCode(size: 12))
+                                    .foregroundStyle(colors.foregroundNormal)
+                                Spacer()
+                                Text("Aisle \(item.location.aisle)")
+                                    .font(.dittoCode(size: 11))
+                                    .foregroundStyle(colors.foregroundSubtle)
+                                AnvilBadge(
+                                    item.stock_level == 0 ? "out" : "\(item.stock_level) left",
+                                    status: item.stock_level == 0 ? .critical : .warning
+                                )
+                            }
+                        }
+                        if count > state.lowStockItems.count {
+                            Text("+ \(count - state.lowStockItems.count) more — full list in Products → ⚠ Low stock")
+                                .font(.caption)
+                                .foregroundStyle(colors.foregroundSubtle)
+                        }
+                    }
+                } else if state.isLoading {
+                    ProgressView().controlSize(.small)
                 }
             }
         }
@@ -304,9 +348,9 @@ private enum Explanations {
     One of the heavier aggregation queries in the benchmark.
     """
     static let lowStock = """
-    Counts inventory rows at your store with fewer than 5 units left. The store \
-    filter rides the composite _id subfield (_id.store_id) — the benchmark's \
-    index-backed "low stock alert" query.
+    Counts and lists inventory rows at your store with fewer than 5 units left. \
+    The store filter rides the composite _id subfield (_id.store_id) — the \
+    benchmark's index-backed "low stock alert" query.
     """
     static let topProducts = """
     Sums line totals per product across this store's order items and takes the \

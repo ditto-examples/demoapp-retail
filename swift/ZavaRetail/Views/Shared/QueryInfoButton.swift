@@ -72,16 +72,33 @@ struct QueryInfoSheet: View {
                     """)
                     .font(.callout)
                     .foregroundStyle(colors.foregroundSubtle)
+
+                    HStack {
+                        Spacer()
+                        AnvilButton("Close", variant: .secondary, size: .sm) {
+                            dismiss()
+                        }
+                    }
+                    .padding(.top, 8)
                 }
                 .padding()
             }
             .background(colors.background)
             .navigationTitle("About this data")
             .toolbar {
+                // Upper-right X — same dismiss as the Close button.
                 ToolbarItem(placement: .automatic) {
-                    AnvilButton("Done", variant: .secondary, size: .sm) {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(colors.foregroundSubtle)
+                            .frame(minWidth: 32, minHeight: 32)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close")
                 }
             }
         }

@@ -7,7 +7,7 @@ import SwiftUI
 /// (orders__aggregation__sum_total_by_status, orders__aggregation__count_by_month,
 /// order_items__aggregation__top_products_by_revenue, inventory__select__low_stock_*).
 /// Aliases are added so rows decode into typed models; the exact string that
-/// executed is always shown in the card's DQL callout.
+/// executed is always shown in the card's info sheet.
 enum DashboardQueries {
     static let statusRevenue = """
     SELECT status, COUNT(*) AS orders, SUM(total) AS revenue \
@@ -29,16 +29,26 @@ enum DashboardQueries {
     SELECT * FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false \
     ORDER BY stock_level LIMIT 5
     """
-    /// Verbatim order_items__aggregation__top_products_by_revenue (the
-    /// benchmark projects ONLY group keys + aggregates — DQL rejects
-    /// projecting product_name here: "must depend only on group keys or
-    /// aggregates"). The row shows product_id; names resolve client-side
-    /// against the shared products catalog if ever needed.
-    static let topProducts = """
-    SELECT product_id, SUM(line_total) AS revenue \
-    FROM order_items WHERE store_id = :storeId AND deleted = false \
-    GROUP BY product_id ORDER BY revenue DESC LIMIT 5
-    """
+    /// subscription__customers_all is unfiltered — this count is the shared
+    /// directory every device holds (25K docs).
+    static let customersCount = "SELECT COUNT(*) AS count FROM customers WHERE deleted = false"
+    /// The shared catalog (400 products, unfiltered subscription).
+    static let productsCount = "SELECT COUNT(*) AS count FROM products WHERE deleted = false"
+    /// Top products by revenue — verbatim order_items__aggregation__top_products_by_revenue
+    /// apart from the LIMIT the card's pull-down controls (10/25/50/100).
+    /// DQL v5.0 GROUP BY projects only group keys + aggregates, so product
+    /// names resolve client-side against the synced catalog.
+    static func topProducts(limit: Int) -> String {
+        """
+        SELECT product_id, SUM(line_total) AS revenue \
+        FROM order_items WHERE store_id = :storeId AND deleted = false \
+        GROUP BY product_id ORDER BY revenue DESC LIMIT \(limit)
+        """
+    }
+
+    /// The whole catalog is small (400 docs) — fetched once per refresh so
+    /// aggregate rows (product_id only) can display product names.
+    static let productsCatalog = "SELECT * FROM products WHERE deleted = false"
 }
 
 /// Aggregate row models (decoded via the same DittoManager.fetch path).
@@ -57,8 +67,6 @@ struct MonthTrendRow: Sendable, Decodable, Identifiable {
     }
 }
 
-// CountRow lives in Models.swift (shared by the paged list screens).
-
 struct TopProductRow: Sendable, Decodable, Identifiable {
     let product_id: String
     let revenue: Double
@@ -75,10 +83,70 @@ final class DashboardState {
     var lowStockCount: Int?
     var lowStockItems: [InventoryItem] = []
     var topProducts: [TopProductRow] = []
+    var topProductsLimit = 10
+    var customersCount: Int?
+    var productsCount: Int?
+    var productNames: [String: String] = [:]
     var isLoading = false
     var error: String?
 
     private var loadedFor: String?
+
+    /// Display name for a product id — resolved from the synced catalog,
+    /// falling back to the raw id when the catalog hasn't synced yet.
+    func productName(_ productId: String) -> String {
+        productNames[productId] ?? productId
+    }
+
+    /// All dashboard queries run as one parallel fan-out (per store).
+    private struct Snapshot {
+        let statusRows: [StatusRevenueRow]
+        let monthRows: [MonthTrendRow]
+        let lowStockCount: Int?
+        let lowStockItems: [InventoryItem]
+        let topProducts: [TopProductRow]
+        let customersCount: Int?
+        let productsCount: Int?
+        let productNames: [String: String]
+    }
+
+    private func fetchSnapshot(storeId: String, limit: Int) async throws -> Snapshot {
+        async let status = DittoManager.shared.fetch(
+            DashboardQueries.statusRevenue, arguments: ["storeId": storeId], as: StatusRevenueRow.self
+        )
+        async let months = DittoManager.shared.fetch(
+            DashboardQueries.monthlyTrend, arguments: ["storeId": storeId], as: MonthTrendRow.self
+        )
+        async let lowStock = DittoManager.shared.fetch(
+            DashboardQueries.lowStock, arguments: ["storeId": storeId], as: CountRow.self
+        )
+        async let lowStockRows = DittoManager.shared.fetch(
+            DashboardQueries.lowStockItems, arguments: ["storeId": storeId], as: InventoryItem.self
+        )
+        async let top = DittoManager.shared.fetch(
+            DashboardQueries.topProducts(limit: limit), arguments: ["storeId": storeId], as: TopProductRow.self
+        )
+        async let customers = DittoManager.shared.fetch(
+            DashboardQueries.customersCount, as: CountRow.self
+        )
+        async let catalog = DittoManager.shared.fetch(
+            DashboardQueries.productsCatalog, as: Product.self
+        )
+        async let products = DittoManager.shared.fetch(
+            DashboardQueries.productsCount, as: CountRow.self
+        )
+        let catalogProducts = try await catalog
+        return try await Snapshot(
+            statusRows: status.sorted { $0.orders > $1.orders },
+            monthRows: months,
+            lowStockCount: lowStock.first?.count,
+            lowStockItems: lowStockRows,
+            topProducts: top,
+            customersCount: customers.first?.count,
+            productsCount: products.first?.count,
+            productNames: Dictionary(uniqueKeysWithValues: catalogProducts.map { ($0.product_id, $0.product_name) })
+        )
+    }
 
     func refresh(appState: AppState) async {
         guard let storeId = appState.selectedStoreId else { return }
@@ -87,31 +155,17 @@ final class DashboardState {
         error = nil
         defer { isLoading = false }
         do {
-            async let status: [StatusRevenueRow] = DittoManager.shared.fetch(
-                DashboardQueries.statusRevenue, arguments: ["storeId": storeId], as: StatusRevenueRow.self
-            )
-            async let months: [MonthTrendRow] = DittoManager.shared.fetch(
-                DashboardQueries.monthlyTrend, arguments: ["storeId": storeId], as: MonthTrendRow.self
-            )
-            async let lowStock: [CountRow] = DittoManager.shared.fetch(
-                DashboardQueries.lowStock, arguments: ["storeId": storeId], as: CountRow.self
-            )
-            async let lowStockRows: [InventoryItem] = DittoManager.shared.fetch(
-                DashboardQueries.lowStockItems, arguments: ["storeId": storeId], as: InventoryItem.self
-            )
-            async let top: [TopProductRow] = DittoManager.shared.fetch(
-                DashboardQueries.topProducts, arguments: ["storeId": storeId], as: TopProductRow.self
-            )
-            statusRows = try await status.sorted { $0.orders > $1.orders }
-            monthRows = try await months
-            lowStockCount = try await lowStock.first?.count
-            lowStockItems = try await lowStockRows
-            topProducts = try await top
+            let snapshot = try await fetchSnapshot(storeId: storeId, limit: topProductsLimit)
+            statusRows = snapshot.statusRows
+            monthRows = snapshot.monthRows
+            lowStockCount = snapshot.lowStockCount
+            lowStockItems = snapshot.lowStockItems
+            topProducts = snapshot.topProducts
+            customersCount = snapshot.customersCount
+            productsCount = snapshot.productsCount
+            productNames = snapshot.productNames
             loadedFor = storeId
-            let summary = "dashboard refresh for \(storeId): \(statusRows.count) status rows, "
-                + "\(monthRows.count) months, lowStock=\(lowStockCount ?? -1), "
-                + "topProducts=\(topProducts.count)"
-            Logger.sync.info("\(summary, privacy: .public)")
+            Logger.sync.info("dashboard refresh for \(storeId, privacy: .public) complete")
         } catch is CancellationError {
             // View torn down mid-refresh — not an error state.
         } catch {
@@ -195,10 +249,13 @@ struct DashboardView: View {
         }
     }
 
+    /// Four KPI widgets share the row evenly (2×2 on narrow screens) — no
+    /// blank space at the trailing edge.
     private var kpiGrid: some View {
-        // Uniform cards: every card fills its grid cell so the pair renders
-        // at identical height and width regardless of content length.
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 200, maximum: 400), spacing: 16, alignment: .top)],
+            spacing: 16
+        ) {
             KpiCard(
                 title: "Orders",
                 value: "\(totalOrders.formatted())",
@@ -213,6 +270,20 @@ struct DashboardView: View {
                 explanation: Explanations.statusRevenue,
                 identifier: "kpi.revenue"
             )
+            KpiCard(
+                title: "Customers synced",
+                value: state.customersCount?.formatted() ?? "…",
+                query: DashboardQueries.customersCount,
+                explanation: Explanations.customersCount,
+                identifier: "kpi.customers"
+            )
+            KpiCard(
+                title: "Catalog products",
+                value: state.productsCount?.formatted() ?? "…",
+                query: DashboardQueries.productsCount,
+                explanation: Explanations.productsCount,
+                identifier: "kpi.products"
+            )
         }
     }
 
@@ -225,24 +296,38 @@ struct DashboardView: View {
                     Spacer()
                     QueryInfoButton(query: DashboardQueries.monthlyTrend, explanation: Explanations.monthlyTrend)
                 }
+                // Column headers — a table of unlabeled numbers is unreadable.
+                HStack {
+                    Text("Month")
+                        .frame(width: 64, alignment: .leading)
+                    Spacer()
+                    Text("Orders")
+                        .frame(width: 70, alignment: .trailing)
+                    Text("Revenue")
+                        .frame(width: 110, alignment: .trailing)
+                }
+                .font(.dittoCode(size: 11))
+                .foregroundStyle(colors.foregroundSubtle)
                 let maxOrders = max(1, state.monthRows.map(\.orders).max() ?? 1)
                 ForEach(state.monthRows) { row in
                     HStack {
                         Text(row.month)
-                            .font(.dittoCode(size: 12))
-                            .foregroundStyle(colors.foregroundSubtle)
-                            .frame(width: 60, alignment: .leading)
+                            .frame(width: 64, alignment: .leading)
                         GeometryReader { geo in
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(colors.fillBrandPrimary)
                                 .frame(width: geo.size.width * CGFloat(row.orders) / CGFloat(maxOrders))
                         }
                         .frame(height: 14)
+                        Spacer()
                         Text("\(row.orders.formatted())")
-                            .font(.dittoCode(size: 12))
+                            .frame(width: 70, alignment: .trailing)
                             .foregroundStyle(colors.foregroundNormal)
-                            .frame(width: 64, alignment: .trailing)
+                        Text(Formatters.usd(row.revenue))
+                            .frame(width: 110, alignment: .trailing)
+                            .foregroundStyle(colors.foregroundSubtle)
                     }
+                    .font(.dittoCode(size: 12))
                 }
                 if state.monthRows.isEmpty && !state.isLoading {
                     Text("No orders synced yet for this store.")
@@ -269,8 +354,6 @@ struct DashboardView: View {
                     QueryInfoButton(query: DashboardQueries.lowStock, explanation: Explanations.lowStock)
                 }
 
-                // The rows behind the count — a card that only says "64" is
-                // useless on the floor; show the most critical SKUs.
                 if let count = state.lowStockCount {
                     if count == 0 {
                         Text("Everything at this store has 5+ units on hand.")
@@ -279,9 +362,10 @@ struct DashboardView: View {
                     } else {
                         ForEach(state.lowStockItems) { item in
                             HStack {
-                                Text(item.product_id)
-                                    .font(.dittoCode(size: 12))
+                                Text(state.productName(item.product_id))
                                     .foregroundStyle(colors.foregroundNormal)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
                                 Spacer()
                                 Text("Aisle \(item.location.aisle)")
                                     .font(.dittoCode(size: 11))
@@ -312,13 +396,32 @@ struct DashboardView: View {
                     Text("Top products by revenue")
                         .font(.headline).foregroundStyle(colors.foregroundNormal)
                     Spacer()
-                    QueryInfoButton(query: DashboardQueries.topProducts, explanation: Explanations.topProducts)
+                    Menu("Top \(state.topProductsLimit)") {
+                        ForEach([10, 25, 50, 100], id: \.self) { limit in
+                            Button("\(limit)") {
+                                state.topProductsLimit = limit
+                                Task { await state.refresh(appState: appState) }
+                            }
+                        }
+                    }
+                    .font(.callout)
+                    .foregroundStyle(colors.foregroundSubtle)
+                    .accessibilityIdentifier("topProducts.limit")
+                    QueryInfoButton(
+                        query: DashboardQueries.topProducts(limit: state.topProductsLimit),
+                        explanation: Explanations.topProducts
+                    )
                 }
-                ForEach(state.topProducts) { row in
+                ForEach(Array(state.topProducts.enumerated()), id: \.element.id) { rank, row in
                     HStack {
-                        Text(row.product_id)
+                        Text("\(rank + 1).")
                             .font(.dittoCode(size: 12))
+                            .foregroundStyle(colors.foregroundSubtle)
+                            .frame(width: 28, alignment: .trailing)
+                        Text(state.productName(row.product_id))
                             .foregroundStyle(colors.foregroundNormal)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                         Spacer()
                         Text(Formatters.usd(row.revenue))
                             .font(.dittoCode(size: 12))
@@ -332,31 +435,6 @@ struct DashboardView: View {
             }
         }
     }
-}
-
-/// Plain-language explanations for the info sheets (QueryInfoButton) — written
-/// for people new to DQL, not for the benchmark authors.
-private enum Explanations {
-    static let statusRevenue = """
-    Counts this store's non-deleted orders and sums their totals, grouped by \
-    status. It's the benchmark's by-status aggregation scoped to your store — \
-    the same DQL shape the performance suite measures.
-    """
-    static let monthlyTrend = """
-    Groups this store's orders into calendar months with substr(order_date, 0, 7) \
-    (DQL's substr is zero-based — a classic gotcha) and shows the latest 12. \
-    One of the heavier aggregation queries in the benchmark.
-    """
-    static let lowStock = """
-    Counts and lists inventory rows at your store with fewer than 5 units left. \
-    The store filter rides the composite _id subfield (_id.store_id) — the \
-    benchmark's index-backed "low stock alert" query.
-    """
-    static let topProducts = """
-    Sums line totals per product across this store's order items and takes the \
-    top 5 by revenue. DQL v5.0 has no JOINs, so the query projects product_id \
-    only (group keys + aggregates — nothing else is allowed in a GROUP BY).
-    """
 }
 
 private struct KpiCard: View {
@@ -389,10 +467,44 @@ private struct KpiCard: View {
                     .accessibilityIdentifier(identifier ?? "")
                 Spacer(minLength: 0)
             }
-            // Fill the grid cell so Orders and Revenue render at identical size.
+            // Fill the grid cell so all four cards render at identical size.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
+}
+
+/// Plain-language explanations for the info sheets (QueryInfoButton) — written
+/// for people new to DQL, not for the benchmark authors.
+private enum Explanations {
+    static let statusRevenue = """
+    Counts this store's non-deleted orders and sums their totals, grouped by \
+    status. It's the benchmark's by-status aggregation scoped to your store — \
+    the same DQL shape the performance suite measures.
+    """
+    static let customersCount = """
+    Counts the customer documents synced to this device. The app subscribes to \
+    ALL customers unfiltered (subscription__customers_all) — a walk-in could be \
+    anyone, so the whole 25K-row directory lives on device.
+    """
+    static let productsCount = """
+    Counts the shared product catalog synced to this device (400 docs). The \
+    catalog is subscribed unfiltered: a rep can sell anything, from any store.
+    """
+    static let monthlyTrend = """
+    Groups this store's orders into calendar months with substr(order_date, 0, 7) \
+    (DQL's substr is zero-based — a classic gotcha) and shows the latest 12. \
+    One of the heavier aggregation queries in the benchmark.
+    """
+    static let lowStock = """
+    Counts and lists inventory rows at your store with fewer than 5 units left. \
+    The store filter rides the composite _id subfield (_id.store_id) — the \
+    benchmark's index-backed "low stock alert" query.
+    """
+    static let topProducts = """
+    Sums line totals per product across this store's order items and takes the \
+    top N by revenue (the pull-down sets N). DQL v5.0 has no JOINs, so the query \
+    projects product_id only and names resolve against the synced catalog.
+    """
 }
 
 #Preview {

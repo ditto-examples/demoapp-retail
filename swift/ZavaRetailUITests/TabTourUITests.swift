@@ -16,6 +16,10 @@ final class TabTourUITests: XCTestCase {
 
         assertLowStockCard(app: app)
 
+        // Trend table has column headers; top products resolve NAMES from the
+        // synced catalog (regression: raw ids like prod_ele_0022 rendered).
+        assertTrendHeadersAndProductNames(app: app)
+
         // KPI values must render on ONE line (regression: the revenue figure
         // bled to a second line). Two .title lines are ~70pt tall; one is ~34.
         let revenue = app.staticTexts["kpi.revenue"]
@@ -85,6 +89,27 @@ final class TabTourUITests: XCTestCase {
         XCTAssertTrue(
             lowStockRow.waitForExistence(timeout: 60),
             "the low-stock card should list the most critical SKUs"
+        )
+    }
+
+    /// Trend table must have column headers, and Top Products / Low Stock must
+    /// show product names resolved from the synced catalog, not raw ids.
+    private func assertTrendHeadersAndProductNames(app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["Month"].waitForExistence(timeout: 60))
+        XCTAssertTrue(app.staticTexts["Revenue"].waitForExistence(timeout: 10))
+
+        // Top products card may be below the fold — scroll to it.
+        let nameRow = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'item '")
+        ).firstMatch
+        var scrolled = 0
+        while !nameRow.exists && scrolled < 6 {
+            app.swipeUp()
+            scrolled += 1
+        }
+        XCTAssertTrue(
+            nameRow.waitForExistence(timeout: 30),
+            "top products / low stock should display product names (e.g. 'HND item 0038')"
         )
     }
 

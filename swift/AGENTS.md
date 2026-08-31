@@ -49,3 +49,10 @@ Nearest-file rule: this file wins over the root AGENTS.md for work in `swift/`.
 - os_log (`Logger.sync` / `Logger.ui`) instead of print; errors surface to
   `AppState.lastError` (the banner in RootView) — never write errors to
   nowhere.
+- **Aggregate rows decode as optionals**: DQL omits group keys/aggregates on
+  an empty match set (a degenerate `{"orders": 0}` row arrives); filter those
+  rows, never render fake zeros.
+- **Screens never render another store's data**: on selection change, clear
+  rows and show `SkeletonRows`/`SkeletonCard` ghosts until the first emission
+  for the new store. Dashboard cards are live observers (values climb as sync
+  delivers), not one-shot fetches.

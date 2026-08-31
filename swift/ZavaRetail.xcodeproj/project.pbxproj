@@ -28,10 +28,12 @@
 		7C592399AF1A109798630142 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 498333BED6C921D0DB9F264A /* AppState.swift */; };
 		811E8C78010B97729807D729 /* ZavaRetailLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */; };
 		90A45A71F962E23CFC843335 /* CustomersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85AE3C784E9463F9070A973A /* CustomersView.swift */; };
+		92F85C758D7529F3E178C4BA /* ModelContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2100067FCD63A1F994739F /* ModelContractTests.swift */; };
 		A2F1D53BFCC78541B363D8DA /* FontRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FD6C6448DCB0E8B4D97BF1 /* FontRegistration.swift */; };
 		A2FEFD02259710CE07FF3CE5 /* QueryInfoButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31F5627A9F1C7138F3EF83EC /* QueryInfoButton.swift */; };
 		A3426949F75516E119A3DF53 /* inter_regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A9FC4539CC3D6BB53C41B9C7 /* inter_regular.ttf */; };
 		AB1341A41822A3852E06BFEA /* PaginationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F8BAEDDF31190D02B94F7A4 /* PaginationBar.swift */; };
+		AF5D824C7FAAE9151DD343B7 /* StoreSwitchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4A0E3BCFA6A98B8E68EBDC /* StoreSwitchUITests.swift */; };
 		B0157C24C1048EB23AAE2291 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39810E047566FB365AB3A658 /* Formatters.swift */; };
 		B93FD0ACF9CE7830D63BD063 /* QueryRunnerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED5440FBA9C010BFE21ADAC /* QueryRunnerUITests.swift */; };
 		C0C295F9D5CB6E56B7930C07 /* Anvil in Frameworks */ = {isa = PBXBuildFile; productRef = C3E9BC59B6001BA0D47C55FD /* Anvil */; };
@@ -43,6 +45,7 @@
 		E4B134C70B8F0A9E969F0A40 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73EDF683DA8636DBED32A493 /* FlowLayout.swift */; };
 		ED98885B73B196D22EDB2AD6 /* retail_samples.json in Resources */ = {isa = PBXBuildFile; fileRef = 5457B247D96FD947351D99D6 /* retail_samples.json */; };
 		F2393DC4EC21574C2DD0C3E9 /* DittoAllToolsMenu in Frameworks */ = {isa = PBXBuildFile; productRef = 2525B5C90EC10C7BA1FEC712 /* DittoAllToolsMenu */; };
+		FA89A688B76793A0F1B656B2 /* SkeletonBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D3FC985481E367471FCD5C /* SkeletonBox.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +85,7 @@
 		72C7A095635AD11CB024B439 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		73EDF683DA8636DBED32A493 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		7666F6794BD5E605B653F54A /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		7D4A0E3BCFA6A98B8E68EBDC /* StoreSwitchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSwitchUITests.swift; sourceTree = "<group>"; };
 		83FAEC32AEE91ABC779057B0 /* ZavaRetailTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ZavaRetailTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		84CF1457FDAA643582C2D72A /* benchmarks.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = benchmarks.json; sourceTree = "<group>"; };
 		85AE3C784E9463F9070A973A /* CustomersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomersView.swift; sourceTree = "<group>"; };
@@ -92,10 +96,12 @@
 		B169248D7E6030CE724123D4 /* ZavaRetailApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailApp.swift; sourceTree = "<group>"; };
 		B2A972431A3930F438EC0FCC /* Anvil */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Anvil; path = ../vendor/anvil/swift/Anvil; sourceTree = SOURCE_ROOT; };
 		B35A89A22AAC427EE67AD22E /* TabTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabTourUITests.swift; sourceTree = "<group>"; };
+		B7D3FC985481E367471FCD5C /* SkeletonBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonBox.swift; sourceTree = "<group>"; };
 		C477E5B15A88C6F15C627334 /* ProductsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductsView.swift; sourceTree = "<group>"; };
 		C4B7FE7877166899FCAE16A6 /* BenchmarkCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkCatalog.swift; sourceTree = "<group>"; };
 		C59C50A9F3B0E7E83854406C /* ZavaRetailUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailUITests.swift; sourceTree = "<group>"; };
 		D30AC555C9111E7C3BD954D0 /* Env.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Env.swift; sourceTree = "<group>"; };
+		ED2100067FCD63A1F994739F /* ModelContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContractTests.swift; sourceTree = "<group>"; };
 		EED5440FBA9C010BFE21ADAC /* QueryRunnerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryRunnerUITests.swift; sourceTree = "<group>"; };
 		F17DF5F2005B9B2A66069FAD /* StorePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePickerView.swift; sourceTree = "<group>"; };
 		F2AC1D9015D767A0FC717CFA /* QueryCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryCatalogView.swift; sourceTree = "<group>"; };
@@ -119,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				EED5440FBA9C010BFE21ADAC /* QueryRunnerUITests.swift */,
+				7D4A0E3BCFA6A98B8E68EBDC /* StoreSwitchUITests.swift */,
 				B35A89A22AAC427EE67AD22E /* TabTourUITests.swift */,
 				C59C50A9F3B0E7E83854406C /* ZavaRetailUITests.swift */,
 			);
@@ -196,6 +203,7 @@
 				39810E047566FB365AB3A658 /* Formatters.swift */,
 				0F8BAEDDF31190D02B94F7A4 /* PaginationBar.swift */,
 				31F5627A9F1C7138F3EF83EC /* QueryInfoButton.swift */,
+				B7D3FC985481E367471FCD5C /* SkeletonBox.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -249,6 +257,7 @@
 		8DBE6BCA583CBE27B28EC5BC /* ZavaRetailTests */ = {
 			isa = PBXGroup;
 			children = (
+				ED2100067FCD63A1F994739F /* ModelContractTests.swift */,
 				5457B247D96FD947351D99D6 /* retail_samples.json */,
 				3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */,
 				5C9904CB102B5DEBCBBD8D7A /* ZavaRetailTests.swift */,
@@ -533,6 +542,7 @@
 				659E824038669D2F0B09C239 /* QueryCatalogView.swift in Sources */,
 				A2FEFD02259710CE07FF3CE5 /* QueryInfoButton.swift in Sources */,
 				2AB316E674532B7902B07EB7 /* RootView.swift in Sources */,
+				FA89A688B76793A0F1B656B2 /* SkeletonBox.swift in Sources */,
 				2CA68AEA2811064D2EEDC068 /* StorePickerView.swift in Sources */,
 				5CB0FCB855B85CF29853B36A /* ZavaRetailApp.swift in Sources */,
 			);
@@ -542,6 +552,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				92F85C758D7529F3E178C4BA /* ModelContractTests.swift in Sources */,
 				811E8C78010B97729807D729 /* ZavaRetailLogicTests.swift in Sources */,
 				617A5EA21E4373A7B059A9B1 /* ZavaRetailTests.swift in Sources */,
 			);
@@ -552,6 +563,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B93FD0ACF9CE7830D63BD063 /* QueryRunnerUITests.swift in Sources */,
+				AF5D824C7FAAE9151DD343B7 /* StoreSwitchUITests.swift in Sources */,
 				D373FEA70E8E17F76E92A82C /* TabTourUITests.swift in Sources */,
 				C983758D0688AA219B16AAE4 /* ZavaRetailUITests.swift in Sources */,
 			);

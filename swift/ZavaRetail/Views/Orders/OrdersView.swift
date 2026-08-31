@@ -21,6 +21,7 @@ final class OrdersState {
 
     private var pageObserver: DittoStoreObserver?
     private var countObserver: DittoStoreObserver?
+    private var lastStoreId: String?
     /// Restart serialization: every restart cancels and awaits the in-flight
     /// one, so rapid filter/page changes can't leave two observers alive.
     private var restartTask: Task<Void, Never>?
@@ -47,6 +48,14 @@ final class OrdersState {
         pageObserver = nil
         countObserver = nil
         guard let storeId = appState.selectedStoreId else { return }
+
+        // Never render the previous store's rows: clear before re-registering
+        // so the skeleton shows instead of stale data.
+        if lastStoreId != storeId {
+            orders = []
+            totalCount = 0
+        }
+        lastStoreId = storeId
 
         var whereClause = Self.baseWhere
         var arguments: [String: Sendable] = ["storeId": storeId]
@@ -137,11 +146,10 @@ struct OrdersView: View {
                 Group {
                     if state.orders.isEmpty {
                         VStack(spacing: 12) {
-                            ProgressView()
-                            Text("Syncing orders for this store…")
-                                .foregroundStyle(colors.foregroundSubtle)
                             if let error = state.error {
                                 AnvilBadge(error, status: .critical)
+                            } else {
+                                SkeletonRows(count: 8)
                             }
                         }
                         .frame(maxHeight: .infinity)

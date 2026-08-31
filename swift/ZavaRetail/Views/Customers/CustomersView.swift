@@ -22,6 +22,7 @@ final class CustomersState {
     private var pageObserver: DittoStoreObserver?
     private var countObserver: DittoStoreObserver?
     private var restartTask: Task<Void, Never>?
+    private var lastStoreId: String?
     private var started = false
 
     /// Query text constants are nonisolated: the static whereClause() helper
@@ -74,6 +75,13 @@ final class CustomersState {
         countObserver?.cancel()
         pageObserver = nil
         countObserver = nil
+
+        // Never render the previous store's rows.
+        if lastStoreId != appState.selectedStoreId {
+            customers = []
+            totalCount = 0
+        }
+        lastStoreId = appState.selectedStoreId
 
         let whereClause = Self.whereClause(thisStoreOnly: thisStoreOnly, storeId: appState.selectedStoreId)
         var arguments: [String: Sendable] = [:]
@@ -154,13 +162,13 @@ struct CustomersView: View {
                     if state.visibleCustomers.isEmpty {
                         Spacer()
                         VStack(spacing: 12) {
-                            ProgressView()
-                            Text(state.isSearching
-                                ? "No matches"
-                                : "Syncing the customer directory…")
-                                .foregroundStyle(colors.foregroundSubtle)
                             if let error = state.error {
                                 AnvilBadge(error, status: .critical)
+                            } else if state.isSearching {
+                                Text("No matches")
+                                    .foregroundStyle(colors.foregroundSubtle)
+                            } else {
+                                SkeletonRows(count: 8)
                             }
                         }
                         Spacer()

@@ -86,6 +86,11 @@ final class TabTourUITests: XCTestCase {
         let lowStockRow = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'left' OR label == 'out'")
         ).firstMatch
+        var lowScrolled = 0
+        while !lowStockRow.exists && lowScrolled < 6 {
+            app.swipeUp()
+            lowScrolled += 1
+        }
         XCTAssertTrue(
             lowStockRow.waitForExistence(timeout: 60),
             "the low-stock card should list the most critical SKUs"

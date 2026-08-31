@@ -38,6 +38,7 @@ final class ProductsState {
     private var restartTask: Task<Void, Never>?
     private var productsById: [String: Product] = [:]
     private var startedFor: String?
+    private var lastStoreId: String?
 
     static let productsWhere = "FROM products WHERE deleted = false"
     static let productsByCategoryWhere = "FROM products WHERE category_id = :categoryId AND deleted = false"
@@ -103,15 +104,23 @@ final class ProductsState {
         restartTask = Task {
             await previous?.value
             guard !Task.isCancelled else { return }
-            await reloadPage()
+            await reloadPage(appState: appState)
         }
     }
 
-    private func reloadPage() async {
+    private func reloadPage(appState: AppState) async {
         pageObserver?.cancel()
         countObserver?.cancel()
         pageObserver = nil
         countObserver = nil
+
+        // Never render the previous store's rows: clear before re-registering
+        // so the skeleton shows instead of stale data.
+        if lastStoreId != appState.selectedStoreId {
+            rows = []
+            totalCount = 0
+        }
+        lastStoreId = appState.selectedStoreId
 
         do {
             if lowStockOnly {
@@ -226,10 +235,13 @@ struct ProductsView: View {
                 Group {
                     if state.visibleRows.isEmpty {
                         Spacer()
-                        Text(state.isSearching ? "No matches" : "No products on this page yet — sync may still be running")
-                            .foregroundStyle(colors.foregroundSubtle)
-                            .multilineTextAlignment(.center)
-                            .padding()
+                        if state.isSearching {
+                            Text("No matches")
+                                .foregroundStyle(colors.foregroundSubtle)
+                        } else {
+                            SkeletonRows(count: 8)
+                                .padding()
+                        }
                         Spacer()
                     } else {
                         List(state.visibleRows) { row in

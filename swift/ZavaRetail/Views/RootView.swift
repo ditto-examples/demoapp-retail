@@ -99,7 +99,9 @@ struct MainTabView: View {
             Tab("Customers", systemImage: "person.2") {
                 CustomersView()
             }
-            Tab("Ditto", systemImage: "circle.hexagongrid") {
+            // The brand mark as the tab icon (asset has light/dark variants;
+            // the tab bar tints it as a template image).
+            Tab("Ditto", image: "DittoMark") {
                 DittoTabView()
             }
         }

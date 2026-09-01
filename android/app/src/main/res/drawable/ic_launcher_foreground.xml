@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the Ditto mark in neutral950 on the citrus
+     background color (ic_launcher_background). Scaled into the 66/108 safe
+     zone; y-down like the SVG source, no flip needed. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.1394"
+        android:scaleY="0.1394"
+        android:translateX="27.8"
+        android:translateY="25.0">
+        <path
+            android:fillColor="#0A0A0A"
+            android:pathData="M170,240 L170,176 L166,172 L102,172 L98,176 L98,240 L102,244 L166,244 Z" />
+        <path
+            android:fillColor="#0A0A0A"
+            android:pathData="M50,260 L46,264 L46,302 L50,306 L88,306 L92,302 L92,264 L88,260 L50,260 Z" />
+        <path
+            android:fillColor="#0A0A0A"
+            android:pathData="M50,110 L46,114 L46,152 L50,156 L88,156 L92,152 L92,114 L88,110 L50,110 Z" />
+        <path
+            android:fillColor="#0A0A0A"
+            android:pathData="M326,162h-72l-4-4v-62l-4-4h-64l-4-4v-38l-4-4h-44l-4,4v46l4,4h48l4,4v62l4,4h68l4,4v68l-4,4h-68l-4,4v62l-4,4h-48l-4,4v46l4,4h44l4-4v-38l4-4h64l4-4v-62l4-4h72l4-4v-84l-4-4Z" />
+    </group>
+</vector>

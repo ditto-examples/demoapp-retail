@@ -43,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -288,7 +290,18 @@ private fun MainTabs(appState: AppState) {
                             Icon(tab.icon!!, contentDescription = tab.label)
                         }
                     },
-                    label = { Text(tab.label) },
+                    label = {
+                        // "Customers" is the long pole: on narrow bars (folded
+                        // cover display) the default label size wraps it to a
+                        // second line. One line, slightly smaller, ellipsize
+                        // as the degradation mode — never a wrap.
+                        Text(
+                            tab.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                        )
+                    },
                 )
             }
         },

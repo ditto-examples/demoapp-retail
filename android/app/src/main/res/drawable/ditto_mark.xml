@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Ditto mark (assets/ditto_mark-dark.svg, verbatim geometry). Tinted at
+     the use site (ColorFilter.tint / Icon tint) so dark/light adapt via the
+     Anvil foreground token — mirrors the asset catalog's light/dark variants. -->
+<!-- Intrinsic size is 24dp (standard tab-icon size) — Material3's Icon only
+     defaults to 24dp for painters WITHOUT an intrinsic size; an oversized
+     intrinsic here would render the mark at 376×416dp (caught on-device:
+     it took half the nav rail). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="376"
+    android:viewportHeight="416">
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M170,240 L170,176 L166,172 L102,172 L98,176 L98,240 L102,244 L166,244 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M50,260 L46,264 L46,302 L50,306 L88,306 L92,302 L92,264 L88,260 L50,260 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M50,110 L46,114 L46,152 L50,156 L88,156 L92,152 L92,114 L88,110 L50,110 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M326,162h-72l-4-4v-62l-4-4h-64l-4-4v-38l-4-4h-44l-4,4v46l4,4h48l4,4v62l4,4h68l4,4v68l-4,4h-68l-4,4v62l-4,4h-48l-4,4v46l4,4h44l4-4v-38l4-4h64l4-4v-62l4-4h72l4-4v-84l-4-4Z" />
+</vector>

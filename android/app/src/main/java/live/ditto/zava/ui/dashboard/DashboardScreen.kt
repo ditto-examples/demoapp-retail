@@ -33,7 +33,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import live.ditto.anvil.material3.DittoColors
 import live.ditto.anvil.material3.DittoMonoFontFamily
+import live.ditto.zava.R
 import live.ditto.zava.data.DittoManager
 import live.ditto.zava.model.CountRow
 import live.ditto.zava.model.InventoryItem
@@ -289,7 +292,8 @@ private fun DashboardHeader(
 ) {
     val colors = DittoColors.current
     var menuOpen by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
         Box {
             TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("storeSwitcher")) {
                 Text(
@@ -316,18 +320,31 @@ private fun DashboardHeader(
                 }
             }
         }
-        if (store != null) {
-            val location = if (store.location.address == "n/a") {
-                "${store.location.city}, ${store.location.state}"
-            } else {
-                "${store.location.address}, ${store.location.city}, ${store.location.state}"
+            if (store != null) {
+                val location = if (store.location.address == "n/a") {
+                    "${store.location.city}, ${store.location.state}"
+                } else {
+                    "${store.location.address}, ${store.location.city}, ${store.location.state}"
+                }
+                Text(
+                    "· $location",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.foregroundSubtle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
             }
-            Text(
-                "· $location",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.foregroundSubtle,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Spacer(Modifier.weight(1f))
+            // The full Ditto logotype, trailing on the same line as the store
+            // switcher (tinted with the Anvil foreground token — adapts to
+            // dark/light like the SVG variants).
+            androidx.compose.foundation.Image(
+                painter = painterResource(R.drawable.ditto_logotype),
+                contentDescription = "Ditto",
+                modifier = Modifier.height(22.dp),
+                alignment = Alignment.CenterStart,
+                colorFilter = ColorFilter.tint(colors.foregroundNormal),
             )
         }
     }

@@ -46,6 +46,14 @@ shape (DQL strings verbatim, same copy, same states).
   the Anvil module.
 - **Nav**: Navigation 3 backstack + `NavigationSuiteScaffold` (bottom bar on
   phones, rail on wide/foldable screens — verified on a Galaxy Z Fold).
-- **App icon**: adaptive icon (citrus #E7EE00 background + neutral950 bag
-  foreground), brand parity with iOS/macOS (`swift/scripts/make_icon.swift`
-  geometry, scaled to the 66/108 safe zone).
+- **App icon**: adaptive icon — citrus #E7EE00 background + neutral950 Ditto
+  mark as a VECTOR foreground (`res/drawable/ic_launcher_foreground.xml`,
+  geometry from `assets/ditto_mark-dark.svg`, scaled to the 66/108 safe
+  zone); brand parity with iOS/macOS (`swift/scripts/make_icon.swift`).
+- **Brand assets**: `assets/` (repo root) holds the Ditto mark/logotype SVGs
+  (dark + white). Android uses vector drawables tinted with the Anvil
+  foreground token (`ditto_mark.xml` intrinsic size MUST stay 24dp — a
+  painter with a large intrinsic size renders unbounded in `Icon`; caught
+  on-device). iOS uses asset-catalog imagesets with Any/Dark variants — the
+  tab-icon SVG needs explicit small `width`/`height` attributes or the
+  tab-bar layout breaks (hit points go off-screen).

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,7 +22,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Handyman
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -103,14 +104,21 @@ private val Route.title: String
         Route.Tools -> "Ditto tools"
     }
 
-private data class Tab(val route: Route, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+private data class Tab(
+    val route: Route,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    val iconRes: Int? = null,
+)
 
 private val tabs = listOf(
     Tab(Route.Home, "Home", Icons.Filled.Home),
     Tab(Route.Orders, "Orders", Icons.Filled.Receipt),
     Tab(Route.Products, "Products", Icons.Filled.Handyman),
     Tab(Route.Customers, "Customers", Icons.Filled.Groups),
-    Tab(Route.Ditto, "Ditto", Icons.Filled.Hub),
+    // The brand mark as the tab icon (NavigationSuite tints it like any tab
+    // icon, matching the Swift tab bar's template rendering).
+    Tab(Route.Ditto, "Ditto", iconRes = R.drawable.ditto_mark),
 )
 
 class MainActivity : ComponentActivity() {
@@ -269,7 +277,17 @@ private fun MainTabs(appState: AppState) {
                 item(
                     selected = currentTab == tab.route,
                     onClick = { selectTab(tab.route) },
-                    icon = { Icon(tab.icon, contentDescription = tab.label) },
+                    icon = {
+                        if (tab.iconRes != null) {
+                            Icon(
+                                painterResource(tab.iconRes),
+                                contentDescription = tab.label,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        } else {
+                            Icon(tab.icon!!, contentDescription = tab.label)
+                        }
+                    },
                     label = { Text(tab.label) },
                 )
             }

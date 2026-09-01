@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The full Ditto logotype — mark + block wordmark
+     (assets/ditto_full-logotype_dark.svg, verbatim geometry; letter-d and
+     letter-o use evenOdd so their counters punch out). Tinted at the use
+     site so dark/light adapt via the Anvil foreground token. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1202dp"
+    android:height="328dp"
+    android:viewportWidth="1202"
+    android:viewportHeight="328">
+    <!-- Mark -->
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M124.2,196.3 L124.2,132.3 L120.2,128.3 L56.2,128.3 L52.2,132.3 L52.2,196.3 L56.2,200.3 L120.2,200.3 L124.2,196.3 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M4.2,216.3 L0.2,220.3 L0.2,258.3 L4.2,262.3 L42.2,262.3 L46.2,258.3 L46.2,220.3 L42.2,216.3 L4.2,216.3 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M4.2,66.3 L0.2,70.3 L0.2,108.3 L4.2,112.3 L42.2,112.3 L46.2,108.3 L46.2,70.3 L42.2,66.3 L4.2,66.3 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M280.2,118.3h-72l-4-4v-62l-4-4h-64l-4-4V6.3l-4-4h-44l-4,4v46l4,4h48l4,4v62l4,4h68l4,4v68l-4,4h-68l-4,4v62l-4,4h-48l-4,4v46l4,4h44l4-4v-38l4-4h64l4-4v-62l4-4h72l4-4v-84l-4-4Z" />
+    <!-- Wordmark -->
+    <path
+        android:fillColor="#0A0A0A"
+        android:fillType="evenOdd"
+        android:pathData="M390.2,48.3v232h169.5l60-60v-112l-60-60h-169.5ZM564.2,202.3l-26,26h-98V100.3h98l26,26v76Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M657.2,136.3 h50 v144 h-50 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M657.2,48.3 h50 v50 h-50 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M934.2,48.3 L884.2,48.3 L884.2,238.3 L930.2,238.3 L934.2,242.3 L934.2,280.3 L990.2,280.3 L990.2,224.3 L938.2,224.3 L934.2,220.3 L934.2,140.3 L990.2,140.3 L990.2,94.3 L934.2,94.3 L934.2,48.3 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:pathData="M798.2,48.3 L748.2,48.3 L748.2,238.3 L794.2,238.3 L798.2,242.3 L798.2,280.3 L854.2,280.3 L854.2,224.3 L802.2,224.3 L798.2,220.3 L798.2,140.3 L854.2,140.3 L854.2,94.3 L798.2,94.3 L798.2,48.3 Z" />
+    <path
+        android:fillColor="#0A0A0A"
+        android:fillType="evenOdd"
+        android:pathData="M1168.7,94.3h-120l-33,33v120l33,33h120l33-33v-120l-33-33ZM1156.7,228.6l-6.6,6.6h-82.7l-6.6-6.6v-82.7l6.6-6.6h82.7l6.6,6.6v82.7Z" />
+</vector>

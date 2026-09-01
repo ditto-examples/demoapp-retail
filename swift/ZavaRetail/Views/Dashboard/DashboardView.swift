@@ -320,6 +320,13 @@ struct DashboardView: View {
                         .minimumScaleFactor(0.7)
                 }
                 Spacer()
+                // The full Ditto logotype, trailing on the same line as the
+                // store switcher (asset carries light/dark variants).
+                Image("DittoLogotype")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 22)
+                    .accessibilityLabel("Ditto")
             }
             if let error = state.error {
                 AnvilBadge(error, status: .critical)

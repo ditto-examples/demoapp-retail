@@ -22,6 +22,9 @@ final class CustomersState {
     private var pageObserver: DittoStoreObserver?
     private var countObserver: DittoStoreObserver?
     private var restartTask: Task<Void, Never>?
+    /// Dedicated search task — deliberately NOT restartTask (typing must not
+    /// cancel a pending observer restart; see OrdersState).
+    private var searchTask: Task<Void, Never>?
     private var lastStoreId: String?
     private var started = false
 
@@ -42,7 +45,7 @@ final class CustomersState {
     static let emailQuery = "SELECT * FROM customers WHERE email = :email AND deleted = false"
     static let nameQuery = """
     SELECT * FROM customers WHERE deleted = false \
-    AND (first_name LIKE :like OR last_name LIKE :like) ORDER BY last_name LIMIT 50
+    AND (first_name ILIKE :like OR last_name ILIKE :like) ORDER BY last_name LIMIT 50
     """
 
     func start(appState: AppState) {
@@ -58,6 +61,8 @@ final class CustomersState {
         countObserver = nil
         restartTask?.cancel()
         restartTask = nil
+        searchTask?.cancel()
+        searchTask = nil
         started = false
     }
 
@@ -93,7 +98,16 @@ final class CustomersState {
             countObserver = try await DittoManager.shared.observe(
                 "SELECT COUNT(*) AS count \(whereClause)", arguments: arguments, as: CountRow.self
             ) { [weak self] rows in
-                self?.totalCount = rows.first?.count ?? 0
+                guard let self else { return }
+                totalCount = rows.first?.count ?? 0
+                // Count shrank under the current page (deletion / store
+                // switch / filter change) — clamp and restart, or the OFFSET
+                // page returns nothing and the screen sits on skeletons.
+                let clamped = Paging.clampPage(page, total: totalCount, pageSize: pageSize)
+                if clamped != page {
+                    page = clamped
+                    restart(appState: appState)
+                }
             }
             let pageQuery = Paging.pageQuery(
                 base: "SELECT * \(whereClause)", orderBy: "last_name, first_name, _id",
@@ -112,13 +126,13 @@ final class CustomersState {
     }
 
     func search() {
-        restartTask?.cancel()
+        searchTask?.cancel()
         let term = searchText.trimmingCharacters(in: .whitespaces)
         if term.isEmpty {
             searchResults = nil
             return
         }
-        restartTask = Task { [weak self] in
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             do {
@@ -132,6 +146,8 @@ final class CustomersState {
                         Self.nameQuery, arguments: ["like": "\(term)%"], as: Customer.self
                     )
                 }
+                guard !Task.isCancelled else { return }
+                self?.error = nil
             } catch is CancellationError {
             } catch {
                 self?.error = error.localizedDescription

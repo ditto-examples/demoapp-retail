@@ -28,6 +28,8 @@ actor DittoManager {
     private var sharedSubscriptions: [DittoSyncSubscription] = []
     private var storeSubscriptions: [DittoSyncSubscription] = []
     private var openTask: Task<Ditto, Error>?
+    /// Generation guard so open() only clears its OWN in-flight task.
+    private var openGeneration = 0
     private var selectionEpoch = 0
     private var reEvictTask: Task<Void, Never>?
 
@@ -65,12 +67,25 @@ actor DittoManager {
             return try await openTask.value
         }
 
+        // Single-owner clearing with a generation guard: a failed/successful
+        // open only ever clears its OWN task — a retry's in-flight task is
+        // never clobbered (adversarial review: the catch used to clear
+        // unconditionally, and openAndConfigure's catch cleared too, so two
+        // owners could drop a newer task's handle).
+        openGeneration += 1
+        let generation = openGeneration
         let task = Task { try await self.openAndConfigure(config: config, onError: onError) }
         openTask = task
         do {
-            return try await task.value
+            let instance = try await task.value
+            if openGeneration == generation {
+                openTask = nil
+            }
+            return instance
         } catch {
-            openTask = nil
+            if openGeneration == generation {
+                openTask = nil
+            }
             throw error
         }
     }
@@ -88,8 +103,8 @@ actor DittoManager {
         // Capture only the values needed by the closure to avoid retaining
         // the DittoManager actor through the SDK-held expirationHandler.
         let token = config.developmentToken
-        instance.auth?.expirationHandler = { dittoAuth, _ in
-            dittoAuth.auth?.login(token: token, provider: .development) { _, error in
+        instance.auth?.expirationHandler = { dittoInstance, _ in
+            dittoInstance.auth?.login(token: token, provider: .development) { _, error in
                 if let error {
                     Task { @MainActor in
                         onError("Ditto auth failed: \(error.localizedDescription)")
@@ -104,12 +119,13 @@ actor DittoManager {
             try await Self.startSyncNow(instance)
         } catch {
             // Don't pin a half-initialized instance behind the early-return
-            // guard: stop sync, drop the reference (ARC releases the SDK
-            // instance), and let the next open() retry from scratch.
+            // guard: stop sync, cancel whatever registered, drop the
+            // reference (ARC releases the SDK instance), and let the next
+            // open() retry from scratch. openTask clearing stays with open().
             await Self.stopSyncNow(instance)
+            sharedSubscriptions.forEach { $0.cancel() }
             sharedSubscriptions = []
             ditto = nil
-            openTask = nil
             throw error
         }
         ditto = instance
@@ -135,16 +151,17 @@ actor DittoManager {
 
     private func registerSharedSubscriptions(on ditto: Ditto) throws {
         guard sharedSubscriptions.isEmpty else { return }
-        sharedSubscriptions = try [
-            ditto.sync.registerSubscription(query: "SELECT * FROM stores"),
-            ditto.sync.registerSubscription(query: "SELECT * FROM categories"),
-            ditto.sync.registerSubscription(query: "SELECT * FROM products"),
-            // subscription__customers_all: the full customer directory — a
-            // walk-in could be anyone, so devices hold all of them.
-            ditto.sync.registerSubscription(
-                query: "SELECT * FROM customers WHERE deleted = false"
-            )
-        ]
+        // Register one at a time INTO the tracked list: if a registration
+        // throws, the already-registered ones are tracked (and cancelled by
+        // the caller's teardown) rather than leaked as anonymous live subs.
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM stores"))
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM categories"))
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM products"))
+        // subscription__customers_all: the full customer directory — a
+        // walk-in could be anyone, so devices hold all of them.
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(
+            query: "SELECT * FROM customers WHERE deleted = false"
+        ))
     }
 
     /// The benchmark README is explicit: composite-_id subfield queries need
@@ -172,14 +189,22 @@ actor DittoManager {
     ///
     /// Concurrency: the EVICT awaits suspend, so a second selection can arrive
     /// mid-switch. Each call bumps `selectionEpoch`; after every suspension a
-    /// stale call bails out BEFORE registering anything, so an interrupted
-    /// switch leaves either the old or the new store fully in place — never a
-    /// torn mix. Throws `AppError` when superseded so the UI can roll back.
+    /// stale call bails out BEFORE registering anything — superseded switches
+    /// simply RETURN (the latest pick wins; there is nothing to roll back).
+    ///
+    /// Failure path: if an EVICT throws mid-switch, the old store's subs are
+    /// already cancelled and its data partially evicted — the old store no
+    /// longer exists as a coherent target, so `currentStoreId` is cleared
+    /// before rethrowing and the UI rolls back to the picker (from which any
+    /// selection starts clean) instead of to a torn store.
     func applyStoreSelection(_ storeId: String) async throws {
         guard Self.isValidStoreId(storeId) else {
             throw AppError.error(message: "Invalid store id '\(storeId)'")
         }
-        guard let ditto, storeId != currentStoreId else { return }
+        guard let ditto else {
+            throw AppError.error(message: "Ditto is not open yet")
+        }
+        guard storeId != currentStoreId else { return }
         selectionEpoch += 1
         let epoch = selectionEpoch
         Self.log.info("store selection → \(storeId, privacy: .public): re-registering per-store subscriptions")
@@ -192,29 +217,34 @@ actor DittoManager {
         // Evict data from any previous store. All three per-store collections
         // carry a top-level store_id (inventory has both that and the
         // composite _id), so one simple predicate works everywhere.
-        for collection in ["order_items", "orders", "inventory"] {
-            try await ditto.store.execute(
-                query: "EVICT FROM \(collection) WHERE store_id != :storeId",
-                arguments: ["storeId": storeId]
-            ).dematerializeItems()
-            guard selectionEpoch == epoch else { return } // superseded mid-evict
+        do {
+            for collection in ["order_items", "orders", "inventory"] {
+                try await ditto.store.execute(
+                    query: "EVICT FROM \(collection) WHERE store_id != :storeId",
+                    arguments: ["storeId": storeId]
+                ).dematerializeItems()
+                guard selectionEpoch == epoch else { return } // superseded mid-evict
+            }
+        } catch {
+            currentStoreId = nil
+            throw error
         }
 
         guard selectionEpoch == epoch else { return } // superseded before registering
-        storeSubscriptions = try [
-            ditto.sync.registerSubscription(
-                query: "SELECT * FROM inventory WHERE _id.store_id = :storeId AND deleted = false",
-                arguments: ["storeId": storeId]
-            ),
-            ditto.sync.registerSubscription(
-                query: "SELECT * FROM orders WHERE store_id = :storeId AND deleted = false",
-                arguments: ["storeId": storeId]
-            ),
-            ditto.sync.registerSubscription(
-                query: "SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false",
-                arguments: ["storeId": storeId]
-            )
-        ]
+        // Append as registered: a mid-list throw leaves the earlier subs
+        // tracked (the next switch's cancel loop owns them), never leaked.
+        try storeSubscriptions.append(ditto.sync.registerSubscription(
+            query: "SELECT * FROM inventory WHERE _id.store_id = :storeId AND deleted = false",
+            arguments: ["storeId": storeId]
+        ))
+        try storeSubscriptions.append(ditto.sync.registerSubscription(
+            query: "SELECT * FROM orders WHERE store_id = :storeId AND deleted = false",
+            arguments: ["storeId": storeId]
+        ))
+        try storeSubscriptions.append(ditto.sync.registerSubscription(
+            query: "SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false",
+            arguments: ["storeId": storeId]
+        ))
         currentStoreId = storeId
         scheduleReEvict(storeId: storeId, epoch: epoch)
     }
@@ -233,13 +263,21 @@ actor DittoManager {
     }
 
     private func reEvictIfCurrent(storeId: String, epoch: Int) async {
-        guard selectionEpoch == epoch, let ditto else { return }
+        guard selectionEpoch == epoch, ditto != nil else { return }
         Self.log.info("re-evict pass for \(storeId, privacy: .public)")
         for collection in ["order_items", "orders", "inventory"] {
-            try? await ditto.store.execute(
-                query: "EVICT FROM \(collection) WHERE store_id != :storeId",
-                arguments: ["storeId": storeId]
-            ).dematerializeItems()
+            // Re-check the epoch after every suspension, same discipline as
+            // the primary switch path: a newer selection must not watch the
+            // old pass evict ITS freshly-syncing rows.
+            guard selectionEpoch == epoch, let ditto else { return }
+            do {
+                try await ditto.store.execute(
+                    query: "EVICT FROM \(collection) WHERE store_id != :storeId",
+                    arguments: ["storeId": storeId]
+                ).dematerializeItems()
+            } catch {
+                Self.log.error("re-evict failed for \(collection): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -316,7 +354,7 @@ actor DittoManager {
     nonisolated static func runBenchmarkOrchestrated(
         _ prepared: PreparedBenchmark,
         iterations: Int,
-        execute: (String) async throws -> Int
+        execute: @Sendable @escaping (String) async throws -> Int
     ) async throws -> BenchmarkRunResult {
         for query in prepared.preQueries {
             _ = try await execute(query)
@@ -339,16 +377,22 @@ actor DittoManager {
             }
         }
         // Cleanup ALWAYS runs (a failed timed iteration must not strand the
-        // synthetic doc or leave a benchmark index behind) — but its error
-        // never masks the iteration error.
-        var cleanupError: Error?
-        for query in prepared.postQueries {
-            do {
-                _ = try await execute(query)
-            } catch {
-                cleanupError = error
+        // synthetic doc or leave a benchmark index behind) — and even when the
+        // CALLING task was cancelled mid-run (navigating away from a mutating
+        // benchmark): the unstructured child task does not inherit
+        // cancellation, so the DELETE still lands and Big Peer stays clean.
+        // A cleanup error never masks the iteration error.
+        let cleanupError: Error? = await Task { () -> Error? in
+            var cleanupError: Error?
+            for query in prepared.postQueries {
+                do {
+                    _ = try await execute(query)
+                } catch {
+                    cleanupError = error
+                }
             }
-        }
+            return cleanupError
+        }.value
         if let iterationError {
             throw iterationError
         }
@@ -395,6 +439,11 @@ actor DittoManager {
                 if let onDecodeError {
                     let message = "observer decode failed: \(error.localizedDescription)"
                     Task { @MainActor in onDecodeError(message) }
+                } else {
+                    // Never silent: schema drift must not freeze a screen
+                    // without a trace (adversarial review — the hook had zero
+                    // call sites).
+                    Self.log.error("observer decode failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }

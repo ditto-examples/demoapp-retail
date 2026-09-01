@@ -73,6 +73,11 @@ final class ZavaRetailTests: XCTestCase {
             prepared.postQueries,
             ["DELETE FROM customers WHERE _id = 'bench-run7-cust-evict-uuid'"]
         )
+        // preQueries get the same transform (dropping that map must fail loudly).
+        XCTAssertEqual(
+            prepared.preQueries,
+            ["INSERT INTO customers DOCUMENTS(deserialize_json('{\"_id\":\"bench-run7-cust-evict-uuid\"}'))"]
+        )
     }
 
     func testReadOnlyBenchmarksAreUntouched() {

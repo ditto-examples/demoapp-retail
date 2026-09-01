@@ -36,47 +36,78 @@ final class ProductsState {
     private var pageObserver: DittoStoreObserver?
     private var countObserver: DittoStoreObserver?
     private var restartTask: Task<Void, Never>?
+    /// Dedicated search task — deliberately NOT restartTask: typing must not
+    /// cancel a pending observer restart, and a restart must not await the
+    /// 500 ms debounce (same discipline as OrdersState).
+    private var searchTask: Task<Void, Never>?
     private var productsById: [String: Product] = [:]
     private var startedFor: String?
     private var lastStoreId: String?
 
     static let productsWhere = "FROM products WHERE deleted = false"
     static let productsByCategoryWhere = "FROM products WHERE category_id = :categoryId AND deleted = false"
-    static let lowStockWhere = "FROM inventory WHERE stock_level < 5 AND deleted = false"
+    /// Benchmark-shaped (inventory__select__low_stock): the store predicate
+    /// keeps the list correct even if a store switch left stale inventory
+    /// behind (don't rely on the eviction invariant alone — same hardening as
+    /// the dashboard's low-stock card).
+    static let lowStockWhere = "FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false"
     static let searchQuery = """
     SELECT * FROM products WHERE deleted = false \
-    AND (sku = :term OR product_name LIKE :like) ORDER BY product_name LIMIT 50
+    AND (sku = :term OR product_name ILIKE :like) ORDER BY product_name LIMIT 50
     """
 
     func start(appState: AppState) async {
         guard startedFor == nil else { return }
         startedFor = appState.selectedStoreId
+        // Register sequentially: on a mid-start throw, cancel whatever
+        // registered rather than leaking live observers (array-literal
+        // registration drops partial results untracked).
+        var registered: [DittoStoreObserver] = []
         do {
-            categoriesObserver = try await DittoManager.shared.observe(
+            let categories = try await DittoManager.shared.observe(
                 "SELECT * FROM categories", as: Category.self
             ) { [weak self] categories in
                 self?.categories = categories.sorted { $0.category_name < $1.category_name }
             }
+            registered.append(categories)
+            try Task.checkCancellation()
             // The full catalog (400 docs) stays resident: id → name lookups
             // for inventory rows and the low-stock view.
-            productsAllObserver = try await DittoManager.shared.observe(
+            let productsAll = try await DittoManager.shared.observe(
                 "SELECT * FROM products WHERE deleted = false", as: Product.self
             ) { [weak self] products in
+                // Safe to trap on duplicate keys: products is the globally
+                // unique shared catalog (unlike per-store inventory, two
+                // stores' rows can never coexist here).
                 self?.productsById = Dictionary(uniqueKeysWithValues: products.map { ($0.product_id, $0) })
             }
-            // Inventory is already the selected store's slice (subscription).
-            inventoryAllObserver = try await DittoManager.shared.observe(
-                "SELECT * FROM inventory WHERE deleted = false", as: InventoryItem.self
+            registered.append(productsAll)
+            try Task.checkCancellation()
+            // Inventory is already the selected store's slice (subscription) —
+            // but the store predicate keeps it correct even if a switch left
+            // stale rows behind (never trust the eviction invariant alone).
+            let storeId = appState.selectedStoreId ?? ""
+            let inventoryAll = try await DittoManager.shared.observe(
+                "SELECT * FROM inventory WHERE _id.store_id = :storeId AND deleted = false",
+                arguments: ["storeId": storeId], as: InventoryItem.self
             ) { [weak self] items in
                 guard let self else { return }
-                stockByProduct = Dictionary(uniqueKeysWithValues: items.map { ($0.product_id, $0) })
+                // uniquingKeysWith: two stores' rows can coexist in the
+                // re-evict window — never trap on duplicate keys.
+                stockByProduct = Dictionary(items.map { ($0.product_id, $0) }, uniquingKeysWith: { _, new in new })
                 // Refresh badges on the visible page when stock changes.
-                rows = rows.map { Row(product: $0.product, stock: stockByProduct[$0.product.id]) }
+                rows = rows.map { Row(product: $0.product, stock: stockByProduct[$0.product.product_id]) }
             }
+            registered.append(inventoryAll)
+            categoriesObserver = registered[0]
+            productsAllObserver = registered[1]
+            inventoryAllObserver = registered[2]
             restart(appState: appState)
         } catch is CancellationError {
+            registered.forEach { $0.cancel() }
             // View torn down mid-start — not an error state.
         } catch {
+            registered.forEach { $0.cancel() }
             self.error = error.localizedDescription
         }
     }
@@ -96,6 +127,9 @@ final class ProductsState {
         countObserver = nil
         restartTask?.cancel()
         restartTask = nil
+        searchTask?.cancel()
+        searchTask = nil
+        stockByProduct = [:] // never let the previous store's badges linger
         startedFor = nil
     }
 
@@ -119,14 +153,15 @@ final class ProductsState {
         if lastStoreId != appState.selectedStoreId {
             rows = []
             totalCount = 0
+            page = 1
         }
         lastStoreId = appState.selectedStoreId
 
         do {
             if lowStockOnly {
-                try await observeLowStockPage()
+                try await observeLowStockPage(appState: appState)
             } else {
-                try await observeProductsPage()
+                try await observeProductsPage(appState: appState)
             }
             error = nil
         } catch is CancellationError {
@@ -135,7 +170,19 @@ final class ProductsState {
         }
     }
 
-    private func observeProductsPage() async throws {
+    /// When the count shrinks under the current page (deletion, store switch,
+    /// filter change), clamp and restart — same discipline as OrdersState;
+    /// otherwise the page observer's OFFSET returns nothing and the screen
+    /// sits on skeletons forever.
+    private func clampIfNeeded(appState: AppState) {
+        let clamped = Paging.clampPage(page, total: totalCount, pageSize: pageSize)
+        if clamped != page {
+            page = clamped
+            restart(appState: appState)
+        }
+    }
+
+    private func observeProductsPage(appState: AppState) async throws {
         let whereClause: String
         var arguments: [String: Sendable] = [:]
         if let categoryId = selectedCategoryId {
@@ -147,7 +194,9 @@ final class ProductsState {
         countObserver = try await DittoManager.shared.observe(
             "SELECT COUNT(*) AS count \(whereClause)", arguments: arguments, as: CountRow.self
         ) { [weak self] rows in
-            self?.totalCount = rows.first?.count ?? 0
+            guard let self else { return }
+            totalCount = rows.first?.count ?? 0
+            clampIfNeeded(appState: appState)
         }
         // Unique tiebreaker: OFFSET paging over a non-unique key can skip or
         // repeat rows across pages.
@@ -163,18 +212,22 @@ final class ProductsState {
         }
     }
 
-    private func observeLowStockPage() async throws {
+    private func observeLowStockPage(appState: AppState) async throws {
+        let storeId = appState.selectedStoreId ?? ""
+        let arguments: [String: Sendable] = ["storeId": storeId]
         countObserver = try await DittoManager.shared.observe(
-            "SELECT COUNT(*) AS count \(Self.lowStockWhere)", as: CountRow.self
+            "SELECT COUNT(*) AS count \(Self.lowStockWhere)", arguments: arguments, as: CountRow.self
         ) { [weak self] rows in
-            self?.totalCount = rows.first?.count ?? 0
+            guard let self else { return }
+            totalCount = rows.first?.count ?? 0
+            clampIfNeeded(appState: appState)
         }
         let pageQuery = Paging.pageQuery(
             base: "SELECT * \(Self.lowStockWhere)", orderBy: "stock_level, _id",
             page: page, pageSize: pageSize
         )
         pageObserver = try await DittoManager.shared.observe(
-            pageQuery, as: InventoryItem.self
+            pageQuery, arguments: arguments, as: InventoryItem.self
         ) { [weak self] items in
             guard let self else { return }
             rows = items.compactMap { item in
@@ -187,13 +240,13 @@ final class ProductsState {
     /// One-shot search with 500 ms debounce — observers are for live screens;
     /// search-as-you-type is a series of point queries (first 50 matches).
     func search() {
-        restartTask?.cancel()
+        searchTask?.cancel()
         let term = searchText.trimmingCharacters(in: .whitespaces)
         if term.isEmpty {
             searchResults = nil
             return
         }
-        restartTask = Task { [weak self] in
+        searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             do {
@@ -202,7 +255,9 @@ final class ProductsState {
                     arguments: ["term": term, "like": "%\(term)%"],
                     as: Product.self
                 )
+                guard !Task.isCancelled else { return }
                 self?.searchResults = results
+                self?.error = nil
             } catch is CancellationError {
             } catch {
                 self?.error = error.localizedDescription
@@ -235,7 +290,11 @@ struct ProductsView: View {
                 Group {
                     if state.visibleRows.isEmpty {
                         Spacer()
-                        if state.isSearching {
+                        // The error must render — a failed observer/search
+                        // must never look like an eternal skeleton.
+                        if let error = state.error {
+                            AnvilBadge(error, status: .critical)
+                        } else if state.isSearching {
                             Text("No matches")
                                 .foregroundStyle(colors.foregroundSubtle)
                         } else {

@@ -52,8 +52,22 @@ final class AppState {
         selectedStoreId = UserDefaults.standard.string(forKey: Self.selectedStoreKey)
     }
 
+    /// Boot is retryable: a transient failure (network, auth) must not brick
+    /// the app. The Failed screen's Retry button calls this.
+    func retryBoot() {
+        guard case .failed = boot else { return }
+        boot = .loading
+        booting = false
+    }
+
+    /// Re-entrancy guard: boot only runs once per loading phase — two windows
+    /// booting AppState at once must not double-register the stores observer.
+    private var booting = false
+
     func bootApp() async {
-        guard boot == .loading else { return }
+        guard boot == .loading, !booting else { return }
+        booting = true
+        defer { booting = false }
         guard let config = DatabaseConfig.load() else {
             boot = .missingConfig
             return
@@ -70,12 +84,14 @@ final class AppState {
 
             // The store picker and dashboard header observe the shared
             // (unfiltered) stores collection.
-            storesObserver = try await DittoManager.shared.observe(
-                "SELECT * FROM stores",
-                as: Store.self
-            ) { [weak self] stores in
-                Logger.sync.info("stores observer fired: \(stores.count) stores")
-                self?.stores = stores.sorted { $0.store_name < $1.store_name }
+            if storesObserver == nil {
+                storesObserver = try await DittoManager.shared.observe(
+                    "SELECT * FROM stores",
+                    as: Store.self
+                ) { [weak self] stores in
+                    Logger.sync.info("stores observer fired: \(stores.count) stores")
+                    self?.stores = stores.sorted { $0.store_name < $1.store_name }
+                }
             }
 
             if let selectedStoreId {

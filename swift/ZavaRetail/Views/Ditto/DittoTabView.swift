@@ -84,25 +84,36 @@ final class SyncStatusState {
     var error: String?
 
     private var observer: DittoStoreObserver?
+    /// Teardown-while-registering guard: the actor hop to DittoManager
+    /// completes even when the view has disappeared, so a registration can
+    /// land after stop() — cancel it instead of leaking a live observer.
+    private var stopped = false
 
     static let query = "SELECT * FROM system:data_sync_info"
 
     func start() async {
         guard observer == nil else { return }
+        stopped = false
         do {
-            observer = try await DittoManager.shared.observeRawJSON(Self.query) { [weak self] jsonRows in
+            let registered = try await DittoManager.shared.observeRawJSON(Self.query) { [weak self] jsonRows in
                 self?.rows = jsonRows.compactMap { json in
                     guard let data = json.data(using: .utf8),
                           let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any?] else { return nil }
                     return SyncStatusInfo(from: dict)
                 }
             }
+            guard !stopped else {
+                registered.cancel()
+                return
+            }
+            observer = registered
         } catch {
             self.error = error.localizedDescription
         }
     }
 
     func stop() {
+        stopped = true
         observer?.cancel()
         observer = nil
     }
@@ -114,6 +125,9 @@ struct SyncStatusView: View {
 
     var body: some View {
         List {
+            if let error = state.error {
+                AnvilBadge(error, status: .critical)
+            }
             if state.rows.isEmpty {
                 ContentUnavailableView(
                     "No sync sessions yet",
@@ -161,25 +175,33 @@ final class IndexesState {
     var error: String?
 
     private var observer: DittoStoreObserver?
+    private var stopped = false
 
     static let query = "SELECT * FROM system:indexes"
 
     func start() async {
         guard observer == nil else { return }
+        stopped = false
         do {
-            observer = try await DittoManager.shared.observeRawJSON(Self.query) { [weak self] jsonRows in
+            let registered = try await DittoManager.shared.observeRawJSON(Self.query) { [weak self] jsonRows in
                 self?.rows = jsonRows.compactMap { json in
                     guard let data = json.data(using: .utf8),
                           let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any?] else { return nil }
                     return IndexInfo(from: dict)
                 }.sorted { $0.id < $1.id }
             }
+            guard !stopped else {
+                registered.cancel()
+                return
+            }
+            observer = registered
         } catch {
             self.error = error.localizedDescription
         }
     }
 
     func stop() {
+        stopped = true
         observer?.cancel()
         observer = nil
     }
@@ -191,6 +213,16 @@ struct IndexesView: View {
 
     var body: some View {
         List {
+            if let error = state.error {
+                AnvilBadge(error, status: .critical)
+            }
+            if state.rows.isEmpty && state.error == nil {
+                ContentUnavailableView(
+                    "No indexes yet",
+                    systemImage: "list.bullet.indent",
+                    description: Text("Indexes appear once the store is open.")
+                )
+            }
             ForEach(state.rows) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(row.id)

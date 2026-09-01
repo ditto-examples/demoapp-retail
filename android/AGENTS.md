@@ -1,0 +1,51 @@
+# AGENTS.md — android/ (Zava Retail Compose app)
+
+Nearest-file rule: this file wins over the root AGENTS.md for work in `android/`.
+
+M2 port of the SwiftUI reference app (swift/) — deliberate 1:1 UX translation,
+not a redesign. When the SwiftUI app changes, port the change here in the same
+shape (DQL strings verbatim, same copy, same states).
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Build | `./gradlew :app:assembleDebug` |
+| Unit tests | `./gradlew :app:testDebugUnitTest` (23 tests: paging, runner transforms/stats/orchestration, catalog, sanitizers) |
+| Install + run | `adb install -r app/build/outputs/apk/debug/app-debug.apk` then `am start -n live.ditto.zava/.MainActivity` |
+| UI-test store-reset hook | launch extra `-e resetStoreSelection true` clears the persisted store |
+
+## Conventions
+
+- **Ditto access**: `object DittoManager` (data/) is the ONLY access point —
+  a plain singleton, *not* Koin. This deviates deliberately from PLAN §4.3's
+  "Koin singleton" wording: the repo-wide rule is "no DI frameworks, one thin
+  access point", and the Swift reference (`actor DittoManager.shared`) ports
+  1:1. DQL strings stay at the call site.
+- **Observer pipeline**: `registerObserver` callback → decode via
+  `item.jsonString()` + kotlinx-serialization → `item.dematerialize()` →
+  `ResultCoalescer` (100 ms latest-wins) → main-thread state. Screens hold
+  state in plain classes with `mutableStateOf` fields + a Main.immediate
+  scope; observers close in `DisposableEffect`'s onDispose.
+- **Compose gotcha (caught on-device)**: every field read during composition
+  must be `mutableStateOf` — a plain `var` read in an `if` branch that shows
+  skeletons never invalidates, so the screen sticks. (The dashboard's
+  `loadedFor` is the reference fix.)
+- **Screen state fields**: store-switch = clear rows → skeletons until the
+  first emission for the new store (never render another store's data).
+  Orders search: dedicated `searchJob` (never the restart job), store id read
+  AFTER the 500 ms debounce, matches cleared + re-run on store switch.
+- **Env**: gradle reads the ROOT `../.env` into `BuildConfig` fields
+  (DITTO_DATABASE_ID / DITTO_DEVELOPMENT_TOKEN / DITTO_SERVER_URL) in
+  app/build.gradle.kts. Missing config is a UI state, never a crash.
+- **benchmarks.json**: bundled as an asset via `assets.srcDir("../../shared")`
+  (module-relative path — do not "fix" to ../shared).
+- **Theme**: Anvil `DittoTheme` + `DittoColors.current` semantic colors
+  (vendored module is theme-only; `ui/components/Anvil.kt` holds the shared
+  card/badge/button/search-field/skeleton wrappers). Fonts come bundled with
+  the Anvil module.
+- **Nav**: Navigation 3 backstack + `NavigationSuiteScaffold` (bottom bar on
+  phones, rail on wide/foldable screens — verified on a Galaxy Z Fold).
+- **App icon**: adaptive icon (citrus #E7EE00 background + neutral950 bag
+  foreground), brand parity with iOS/macOS (`swift/scripts/make_icon.swift`
+  geometry, scaled to the 66/108 safe zone).

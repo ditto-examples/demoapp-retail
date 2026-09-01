@@ -1,20 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- M0 spike state. M2 grows this skeleton into the real app (PLAN §4):
-         - INTERNET permission is declared below (Big Peer sync needs it);
-           Ditto's P2P transport permissions (BLUETOOTH*, location, local
-           network) are manifest-merged by the Ditto SDK itself.
-         - android:icon is a placeholder system drawable — replace with real
-           adaptive icons.
-         - The platform theme is temporary; M2 adds a proper Anvil-based
-           theme/splash handling. -->
+    <!-- INTERNET: Big Peer sync. The P2P transport permissions (BLUETOOTH_*,
+         NEARBY_WIFI_DEVICES, location) are also manifest-merged by the Ditto
+         SDK itself; declaring them here keeps the merge explicit. P2P
+         transports are on by default even in .server connect mode. -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
+    <!-- Location permissions are manifest-merged by ditto-internal-android
+         (declaring them here too conflicts on maxSdkVersion). -->
+
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi.aware" android:required="false" />
 
     <application
         android:allowBackup="true"
-        android:icon="@android:drawable/ic_menu_compass"
+        android:icon="@mipmap/ic_launcher"
         android:label="Zava Retail"
         android:supportsRtl="true"
         android:theme="@style/Theme.ZavaRetail">

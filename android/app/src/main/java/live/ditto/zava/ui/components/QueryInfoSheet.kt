@@ -20,6 +20,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,18 +36,61 @@ import live.ditto.anvil.material3.DittoColors
 /// info sheet — the app's core teaching move.
 
 @Composable
-fun QueryInfoButton(query: String, explanation: String, modifier: Modifier = Modifier) {
+fun QueryInfoButton(
+    query: String,
+    explanation: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "About this query",
+) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }, modifier = modifier) {
         Icon(
             Icons.Filled.Info,
-            contentDescription = "About this query",
+            contentDescription = contentDescription,
             tint = DittoColors.current.foregroundSubtle,
         )
     }
     if (open) {
         QueryInfoSheet(query = query, explanation = explanation, onDismiss = { open = false })
     }
+}
+
+/// Screens publish their "what this screen does + the actual DQL" here; the
+/// app bar shows an info action for the current screen. Token stack: a pushed
+/// detail screen's entry shadows the list's; popping restores it (and entries
+/// are unpublished on dispose, so a recomposed-underneath list never goes
+/// stale). A null info means "no app-bar info on this screen".
+object ScreenInfoBus {
+    private var stack by mutableStateOf<List<Pair<Long, Pair<String, String>?>>>(emptyList())
+    private var nextToken = 0L
+
+    val current: Pair<String, String>? get() = stack.lastOrNull()?.second
+
+    private fun takeToken(): Long = nextToken++
+
+    @Composable
+    fun publish(query: String?, explanation: String?) {
+        val token = remember { takeToken() }
+        LaunchedEffect(query, explanation) {
+            stack = stack.filter { it.first != token } +
+                (token to if (query != null && explanation != null) query to explanation else null)
+        }
+        DisposableEffect(Unit) { onDispose { stack = stack.filter { it.first != token } } }
+    }
+}
+
+/// Publishes the screen's info for the app bar. Re-publishes when the query
+/// changes (e.g. Orders' live display query with the resolved cutoff).
+@Composable
+fun PublishScreenInfo(query: String, explanation: String) {
+    ScreenInfoBus.publish(query, explanation)
+}
+
+/// Screens without an app-bar info action (benchmark detail shows the DQL
+/// on-screen already; the tools viewer is the Ditto tools' own UI).
+@Composable
+fun SuppressScreenInfo() {
+    ScreenInfoBus.publish(null, null)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

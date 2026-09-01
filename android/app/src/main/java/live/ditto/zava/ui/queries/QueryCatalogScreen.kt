@@ -56,6 +56,7 @@ import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.DittoButton
 import live.ditto.zava.ui.components.DittoCard
+import live.ditto.zava.ui.components.SuppressScreenInfo
 import live.ditto.zava.ui.formatted
 import java.util.Locale
 import java.util.UUID
@@ -158,6 +159,8 @@ fun BenchmarkDetailScreen(name: String, appState: AppState, modifier: Modifier =
 
     var entry by remember { mutableStateOf<BenchmarkEntry?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    // The DQL is already on this screen (query blocks) — no app-bar info here.
+    SuppressScreenInfo()
     LaunchedEffect(Unit) {
         try {
             entry = loadCatalog(context).entries.firstOrNull { it.first == name }?.second

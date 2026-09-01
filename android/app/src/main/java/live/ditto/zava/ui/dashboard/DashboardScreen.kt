@@ -57,6 +57,7 @@ import live.ditto.zava.ui.Formatters
 import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.DittoCard
+import live.ditto.zava.ui.components.PublishScreenInfo
 import live.ditto.zava.ui.components.QueryInfoButton
 import live.ditto.zava.ui.components.SectionHeader
 import live.ditto.zava.ui.components.SkeletonCard
@@ -240,6 +241,9 @@ class DashboardState {
     }
 }
 
+private const val dashboardScreenExplanation =
+    "Every card is a LIVE store observer, not a one-shot fetch — after a store switch the values climb as the new store syncs, and ghost cards cover the gap so you never see another store's rows. The KPI cards aggregate orders by status (COUNT + SUM, above with your store substituted); the trend groups orders into months with substr(order_date, 0, 7) (DQL's substr is zero-based); low stock rides the composite _id.store_id subfield; top products sums order_items line totals with product names resolved client-side (DQL v5.0 has no JOINs). Each card's own ⓘ shows the exact query behind it."
+
 private object Explanations {
     const val statusRevenue = "Counts this store's non-deleted orders and sums their totals, grouped by status. It's the benchmark's by-status aggregation scoped to your store — the same DQL shape the performance suite measures."
     const val customersCount = "Counts the customer documents synced to this device. The app subscribes to ALL customers unfiltered (subscription__customers_all) — a walk-in could be anyone, so the whole 25K-row directory lives on device."
@@ -260,6 +264,12 @@ fun DashboardScreen(appState: AppState, modifier: Modifier = Modifier) {
         state.start(appState)
         onDispose { state.stop() }
     }
+
+    // The app bar carries this screen's info action; the headline KPI query
+    // with the selected store substituted (each card's own ⓘ shows its query).
+    val infoQuery = DashboardQueries.statusRevenue.trimIndent()
+        .replace(":storeId", "'${selectedStoreId ?: "store_seattle"}'")
+    PublishScreenInfo(infoQuery, dashboardScreenExplanation)
 
     val colors = DittoColors.current
     val store = stores.firstOrNull { it.store_id == selectedStoreId }

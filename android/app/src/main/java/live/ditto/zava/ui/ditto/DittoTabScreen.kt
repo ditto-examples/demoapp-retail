@@ -43,6 +43,8 @@ import live.ditto.zava.model.toPlainMap
 import live.ditto.zava.state.AppState
 import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
+import live.ditto.zava.ui.components.PublishScreenInfo
+import live.ditto.zava.ui.components.SuppressScreenInfo
 
 /// The Ditto system tab: Query Runner, live system:* viewers, the official
 /// tools menu, and Switch Store.
@@ -58,6 +60,8 @@ fun DittoTabScreen(
 ) {
     val colors = DittoColors.current
     val ditto by appState.ditto.collectAsStateWithLifecycle()
+
+    PublishScreenInfo(SYNC_STATUS_QUERY, dittoTabExplanation)
 
     LazyColumn(modifier = modifier.fillMaxSize()) {
         item {
@@ -120,15 +124,26 @@ private fun DittoRow(title: String, onClick: () -> Unit) {
     }
 }
 
+private const val dittoTabExplanation =
+    "System & tools for the synced store. Query Runner browses and times the 72-query benchmark catalog against the live synced store. Sync status and Indexes are live views over Ditto's system:data_sync_info and system:indexes virtual collections (the query above). Ditto tools is the official diagnostic viewer. Switch store returns to the picker: picking a new store cancels the per-store subscriptions, EVICTs the old store's local data (EVICT is local-only — the difference from DELETE is a teaching moment), and subscribes to the new store."
+
 // MARK: - Sync status (system:data_sync_info)
 
 private const val SYNC_STATUS_QUERY = "SELECT * FROM system:data_sync_info"
+
+private const val syncStatusExplanation =
+    "Live rows from Ditto's system:data_sync_info virtual collection — one per sync session (Big Peer plus any mesh peers), each with its session status and synced commit id. Watch it during a store switch: the old subscription drains and the new store's slice starts filling in."
+
+private const val indexesExplanation =
+    "Live rows from Ditto's system:indexes virtual collection — every index on the local store. Note the app's zava_* indexes (created at startup to back the per-store subscriptions; app-namespaced so the Query Runner's benchmark cleanup can't drop them) alongside any indexes a benchmark created and dropped during a run."
 
 @Composable
 fun SyncStatusScreen(modifier: Modifier = Modifier) {
     val colors = DittoColors.current
     var rows by remember { mutableStateOf<List<SyncStatusInfo>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    PublishScreenInfo(SYNC_STATUS_QUERY, syncStatusExplanation)
 
     DisposableEffect(Unit) {
         var observer: DittoStoreObserver? = null
@@ -212,6 +227,8 @@ fun IndexesScreen(modifier: Modifier = Modifier) {
     val colors = DittoColors.current
     var rows by remember { mutableStateOf<List<IndexInfo>>(emptyList()) }
 
+    PublishScreenInfo(INDEXES_QUERY, indexesExplanation)
+
     DisposableEffect(Unit) {
         var observer: DittoStoreObserver? = null
         try {
@@ -258,6 +275,7 @@ fun IndexesScreen(modifier: Modifier = Modifier) {
 fun ToolsScreen(appState: AppState, modifier: Modifier = Modifier) {
     val ditto by appState.ditto.collectAsStateWithLifecycle()
     val instance = ditto
+    SuppressScreenInfo() // the tools viewer is Ditto's own diagnostic UI
     if (instance == null) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Ditto not open", color = DittoColors.current.foregroundSubtle)

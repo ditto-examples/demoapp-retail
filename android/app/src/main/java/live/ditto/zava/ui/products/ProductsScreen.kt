@@ -55,6 +55,7 @@ import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.DittoCard
 import live.ditto.zava.ui.components.PaginationBar
+import live.ditto.zava.ui.components.PublishScreenInfo
 import live.ditto.zava.ui.components.SectionHeader
 import live.ditto.zava.ui.components.SkeletonRows
 import live.ditto.zava.ui.components.ZavaSearchField
@@ -79,6 +80,10 @@ class ProductsState {
     var searchResults by mutableStateOf<List<Product>?>(null)
     var lowStockOnly by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
+
+    /// The exact paged query currently observed (args resolved inline) — the
+    /// app bar's info sheet shows this, not a template.
+    var activeQuery by mutableStateOf("")
 
     val isSearching: Boolean get() = searchResults != null
 
@@ -202,6 +207,7 @@ class ProductsState {
         val pageQuery = Paging.pageQuery(
             base = "SELECT * $whereClause", orderBy = "product_name, _id", page = page, pageSize = pageSize,
         )
+        activeQuery = if (categoryId != null) pageQuery.replace(":categoryId", "'$categoryId'") else pageQuery
         pageObserver = DittoManager.observe<Product>(pageQuery, arguments) { products ->
             rows = products.map { Row(it, stockByProduct[it.product_id]) }
         }
@@ -214,6 +220,7 @@ class ProductsState {
         val pageQuery = Paging.pageQuery(
             base = "SELECT * $lowStockWhere", orderBy = "stock_level, _id", page = page, pageSize = pageSize,
         )
+        activeQuery = pageQuery
         pageObserver = DittoManager.observe<InventoryItem>(pageQuery) { items ->
             rows = items.mapNotNull { item ->
                 productsById[item.product_id]?.let { Row(it, item) }
@@ -253,6 +260,11 @@ fun ProductsScreen(appState: AppState, onOpenProduct: (Product, InventoryItem?) 
     val state = remember { ProductsState() }
     val selectedStoreId by appState.selectedStoreId.collectAsStateWithLifecycle()
     val colors = DittoColors.current
+
+    PublishScreenInfo(
+        state.activeQuery.ifEmpty { "SELECT * ${ProductsState.productsWhere} ORDER BY product_name, _id" },
+        productsScreenExplanation,
+    )
 
     LaunchedEffect(Unit) { state.start(appState) }
     DisposableEffect(Unit) { onDispose { state.stop() } }
@@ -401,6 +413,7 @@ private fun ProductRow(row: ProductsState.Row, onClick: () -> Unit) {
 @Composable
 fun ProductDetailScreen(product: Product, stock: InventoryItem?, modifier: Modifier = Modifier) {
     val colors = DittoColors.current
+    PublishScreenInfo(ProductDetailQueries.locationQuery.trimIndent(), ProductDetailQueries.explanation)
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -454,6 +467,9 @@ fun ProductDetailScreen(product: Product, stock: InventoryItem?, modifier: Modif
         }
     }
 }
+
+private const val productsScreenExplanation =
+    "The 400-product catalog is subscribed UNFILTERED — every device holds the whole thing, so chips and paging are instant and offline. Pagination is LIMIT/OFFSET in DQL (ORDER BY product_name, _id LIMIT <pageSize> OFFSET <…>) with a live COUNT(*) observer for the total — the query above is the exact paged query running now.\n\nCategory chips filter in the query (category_id), not in memory. \"⚠ Low stock\" pages the inventory collection directly (stock_level < 5). Rows join the paged products with this store's inventory in memory for the stock badges — inventory syncs per-store, so badges climb as the store slice arrives. Search is one-shot (500 ms debounce): exact SKU match OR product-name LIKE, first 50 matches."
 
 private object ProductDetailQueries {
     const val locationQuery = """

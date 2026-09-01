@@ -65,6 +65,8 @@ import live.ditto.zava.ui.ditto.DittoTabScreen
 import live.ditto.zava.ui.ditto.IndexesScreen
 import live.ditto.zava.ui.ditto.SyncStatusScreen
 import live.ditto.zava.ui.ditto.ToolsScreen
+import live.ditto.zava.ui.components.QueryInfoButton
+import live.ditto.zava.ui.components.ScreenInfoBus
 import live.ditto.zava.ui.orders.OrderDetailScreen
 import live.ditto.zava.ui.orders.OrdersScreen
 import live.ditto.zava.ui.picker.StorePickerScreen
@@ -315,6 +317,17 @@ private fun MainTabs(appState: AppState) {
                             IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
+                        }
+                    },
+                    actions = {
+                        // The screen's info action (right side) — each screen
+                        // publishes its explainer + the ACTUAL DQL running.
+                        ScreenInfoBus.current?.let { (query, explanation) ->
+                            QueryInfoButton(
+                                query = query,
+                                explanation = explanation,
+                                contentDescription = "About this screen",
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.surface),

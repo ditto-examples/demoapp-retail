@@ -44,11 +44,20 @@ object DittoManager {
 
     private val mutex = Mutex()
     private var ditto: Ditto? = null
+
+    /// Read on the Default dispatcher from the re-evict job — needs the
+    /// visibility guarantee (@Volatile), not "the JIT probably flushes it".
+    @Volatile
     var currentStoreId: String? = null
         private set
     private var sharedSubscriptions = mutableListOf<DittoSyncSubscription>()
     private var storeSubscriptions = mutableListOf<DittoSyncSubscription>()
     private var openJob: Deferred<Ditto>? = null
+
+    /// Generation guard so open() only clears its OWN in-flight task.
+    private var openGeneration = 0
+
+    @Volatile
     private var selectionEpoch = 0
     private var reEvictJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -58,9 +67,6 @@ object DittoManager {
     fun init(context: Context) {
         appContext = context.applicationContext
     }
-
-    val isOpen: Boolean get() = ditto != null
-    val instance: Ditto? get() = ditto
 
     /** ^[a-z0-9_\-]+$ — the dataset's store id shape. */
     fun isValidStoreId(storeId: String): Boolean = QueryPreparation.isValidStoreId(storeId)
@@ -80,12 +86,18 @@ object DittoManager {
     suspend fun open(config: DatabaseConfig, onError: (String) -> Unit): Ditto {
         ditto?.let { return it }
         openJob?.let { return it.await() }
+        // Single-owner clearing with a generation guard: a failed/successful
+        // open only ever clears its OWN task — a retry's in-flight task is
+        // never clobbered.
+        val generation = mutex.withLock { ++openGeneration }
         val job = scope.async { openAndConfigure(config, onError) }
         openJob = job
         return try {
-            job.await()
+            val instance = job.await()
+            mutex.withLock { if (openGeneration == generation) openJob = null }
+            instance
         } catch (e: Exception) {
-            mutex.withLock { openJob = null }
+            mutex.withLock { if (openGeneration == generation) openJob = null }
             throw e
         }
     }
@@ -96,10 +108,16 @@ object DittoManager {
         val instance = withContext(Dispatchers.IO) { DittoFactory.create(dittoConfig) }
 
         // Auth: development provider; capture the token BY VALUE (never the
-        // manager) into the SDK-held handler.
+        // manager) into the SDK-held handler. Login failures surface to the
+        // AppState banner via onError — never to nowhere (the Swift reference
+        // forwards these; the first Android cut dropped them).
         val token = config.developmentToken
         instance.auth?.expirationHandler = { d, _ ->
-            d.auth?.login(token = token, provider = DittoAuthenticationProvider.development())
+            try {
+                d.auth?.login(token = token, provider = DittoAuthenticationProvider.development())
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onError("Ditto auth failed: ${e.localizedMessage}") }
+            }
         }
 
         try {
@@ -149,9 +167,14 @@ object DittoManager {
 
     // MARK: - Store switch (epoch-guarded)
 
+    /// Superseded switches simply RETURN (the latest pick wins). Failure
+    /// path: if an EVICT throws mid-switch, the old store's subs are already
+    /// closed and its data partially evicted — the old store no longer exists
+    /// as a coherent target, so currentStoreId is cleared before rethrowing
+    /// and the UI rolls back to the picker, not to a torn store.
     suspend fun applyStoreSelection(storeId: String) {
         if (!isValidStoreId(storeId)) throw AppError("Invalid store id '$storeId'")
-        val instance = ditto ?: return
+        val instance = ditto ?: throw AppError("Ditto is not open yet")
         if (storeId == currentStoreId) return
 
         val epoch = mutex.withLock { ++selectionEpoch }
@@ -163,26 +186,31 @@ object DittoManager {
         // Local-only removal of the old store's slice (EVICT vs DELETE is a
         // teaching moment). Docs in flight can still land afterwards — hence
         // the re-evict pass below.
-        for (collection in listOf("order_items", "orders", "inventory")) {
-            instance.store.execute("EVICT FROM $collection WHERE store_id != :storeId", mapOf("storeId" to storeId)) { }
-            if (selectionEpoch != epoch) return // superseded mid-evict
+        try {
+            for (collection in listOf("order_items", "orders", "inventory")) {
+                instance.store.execute("EVICT FROM $collection WHERE store_id != :storeId", mapOf("storeId" to storeId)) { }
+                if (selectionEpoch != epoch) return // superseded mid-evict
+            }
+        } catch (e: Exception) {
+            currentStoreId = null
+            throw e
         }
         if (selectionEpoch != epoch) return
 
         // The benchmark's subscription__* queries verbatim, parameterized.
-        storeSubscriptions += listOf(
-            instance.sync.registerSubscription(
-                "SELECT * FROM inventory WHERE _id.store_id = :storeId AND deleted = false",
-                mapOf("storeId" to storeId),
-            ),
-            instance.sync.registerSubscription(
-                "SELECT * FROM orders WHERE store_id = :storeId AND deleted = false",
-                mapOf("storeId" to storeId),
-            ),
-            instance.sync.registerSubscription(
-                "SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false",
-                mapOf("storeId" to storeId),
-            ),
+        // Append as registered: a mid-sequence throw leaves the earlier subs
+        // tracked (the next switch's close loop owns them), never leaked.
+        storeSubscriptions += instance.sync.registerSubscription(
+            "SELECT * FROM inventory WHERE _id.store_id = :storeId AND deleted = false",
+            mapOf("storeId" to storeId),
+        )
+        storeSubscriptions += instance.sync.registerSubscription(
+            "SELECT * FROM orders WHERE store_id = :storeId AND deleted = false",
+            mapOf("storeId" to storeId),
+        )
+        storeSubscriptions += instance.sync.registerSubscription(
+            "SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false",
+            mapOf("storeId" to storeId),
         )
         currentStoreId = storeId
         scheduleReEvict(storeId, epoch)
@@ -194,12 +222,18 @@ object DittoManager {
         reEvictJob?.cancel()
         reEvictJob = scope.launch {
             delay(3_000)
-            val instance = ditto ?: return@launch
             if (selectionEpoch != epoch) return@launch
             Log.i(TAG, "re-evict pass for $storeId")
             for (collection in listOf("order_items", "orders", "inventory")) {
-                runCatching {
+                // Re-check the epoch after every suspension, same discipline
+                // as the primary switch path — a newer selection must not
+                // watch the old pass evict ITS freshly-syncing rows.
+                val instance = ditto
+                if (selectionEpoch != epoch || instance == null) return@launch
+                try {
                     instance.store.execute("EVICT FROM $collection WHERE store_id != :storeId", mapOf("storeId" to storeId)) { }
+                } catch (e: Exception) {
+                    Log.e(TAG, "re-evict failed for $collection: ${e.localizedMessage}")
                 }
             }
         }
@@ -255,12 +289,20 @@ object DittoManager {
         return requireInstance().store.registerObserver(query, arguments) { result ->
             try {
                 val decoded = result.items.map { decode(it.jsonString()) }
-                result.items.forEach { it.dematerialize() }
                 coalescer.enqueue(decoded)
             } catch (e: Exception) {
-                onDecodeError?.let { handler ->
-                    scope.launch(Dispatchers.Main) { handler("observer decode failed: ${e.localizedMessage}") }
+                if (onDecodeError != null) {
+                    scope.launch(Dispatchers.Main) { onDecodeError("observer decode failed: ${e.localizedMessage}") }
+                } else {
+                    // Never silent: schema drift must not freeze a screen
+                    // without a trace.
+                    Log.e(TAG, "observer decode failed: ${e.localizedMessage}")
                 }
+            } finally {
+                // Cursors release on EVERY path — a decode throw must not
+                // strand them (the schema-drift case is exactly when we're
+                // already in trouble).
+                result.items.forEach { it.dematerialize() }
             }
             Unit
         }
@@ -281,12 +323,17 @@ object DittoManager {
     ): DittoStoreObserver {
         val coalescer = ResultCoalescer(onChange = onChange)
         return requireInstance().store.registerObserver(query, emptyMap()) { result ->
-            val rows = result.items.map { item ->
-                val obj = json.parseToJsonElement(item.jsonString()) as? JsonObject
-                obj?.let { JsonObject(it.toSortedMap()).toString() } ?: "{}"
+            try {
+                val rows = result.items.map { item ->
+                    val obj = json.parseToJsonElement(item.jsonString()) as? JsonObject
+                    obj?.let { JsonObject(it.toSortedMap()).toString() } ?: "{}"
+                }
+                coalescer.enqueue(rows)
+            } catch (e: Exception) {
+                Log.e(TAG, "raw observer row failed: ${e.localizedMessage}")
+            } finally {
+                result.items.forEach { it.dematerialize() }
             }
-            result.items.forEach { it.dematerialize() }
-            coalescer.enqueue(rows)
             Unit
         }
     }

@@ -89,7 +89,7 @@ class CustomersState {
         const val emailQuery = "SELECT * FROM customers WHERE email = :email AND deleted = false"
         const val nameQuery = """
             SELECT * FROM customers WHERE deleted = false
-            AND (first_name LIKE :like OR last_name LIKE :like) ORDER BY last_name LIMIT 50
+            AND (first_name ILIKE :like OR last_name ILIKE :like) ORDER BY last_name LIMIT 50
         """
     }
 
@@ -146,7 +146,16 @@ class CustomersState {
         try {
             countObserver = DittoManager.observe<CountRow>(
                 "SELECT COUNT(*) AS count $where", arguments,
-            ) { rows -> totalCount = rows.firstOrNull()?.count ?: 0 }
+            ) { rows ->
+                totalCount = rows.firstOrNull()?.count ?: 0
+                // Count shrank under the current page — clamp and restart, or
+                // the OFFSET page returns nothing and skeletons sit forever.
+                val clamped = Paging.clampPage(page, totalCount, pageSize)
+                if (clamped != page) {
+                    page = clamped
+                    restart(appState)
+                }
+            }
             val pageQuery = Paging.pageQuery(
                 base = "SELECT * $where",
                 orderBy = "last_name, first_name, _id",

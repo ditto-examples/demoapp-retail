@@ -86,6 +86,9 @@ fun QueryCatalogScreen(onOpenBenchmark: (String) -> Unit, modifier: Modifier = M
     val context = LocalContext.current
     var catalog by remember { mutableStateOf<BenchmarkCatalog?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // No app-bar info here — the pushed catalog must not inherit the Ditto
+    // tab's entry from the screen-info stack.
+    SuppressScreenInfo()
 
     LaunchedEffect(Unit) {
         try {

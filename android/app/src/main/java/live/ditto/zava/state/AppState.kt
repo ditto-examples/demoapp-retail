@@ -57,14 +57,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     init {
         DittoManager.init(application)
-        // UI-test hook: instrumentation may ask for a clean store selection.
-        if (application.packageManager == null) { /* no-op, mirrors the hook's triviality */ }
     }
 
-    /** Instrumentation hook (mirrors the Swift "-resetStoreSelection" launch arg). */
-    fun resetStoreSelection() {
-        prefs.edit().remove(KEY_SELECTED_STORE).apply()
-        _selectedStoreId.value = null
+    override fun onCleared() {
+        storesObserver?.close()
+        storesObserver = null
     }
 
     private fun persistSelection(storeId: String?) {
@@ -97,8 +94,16 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     _stores.value = stores.sortedBy { it.store_name }
                 }
                 _selectedStoreId.value?.let { persisted ->
-                    Log.i(TAG, "applying persisted store selection: $persisted")
-                    DittoManager.applyStoreSelection(persisted)
+                    if (DittoManager.isValidStoreId(persisted)) {
+                        Log.i(TAG, "applying persisted store selection: $persisted")
+                        DittoManager.applyStoreSelection(persisted)
+                    } else {
+                        // Corrupt/stale pref — drop it and land on the
+                        // picker, never on a recovery-less Failed screen.
+                        Log.w(TAG, "persisted store id '$persisted' is invalid — clearing")
+                        _selectedStoreId.value = null
+                        prefs.edit().remove(KEY_SELECTED_STORE).apply()
+                    }
                 }
                 _boot.value = Boot.Ready
             } catch (e: Exception) {
@@ -132,5 +137,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     fun dismissError() {
         _lastError.value = null
+    }
+
+    /// Boot is retryable: a transient failure (network, auth) must not brick
+    /// the app. The Failed screen's Retry button calls this.
+    fun retryBoot() {
+        if (_boot.value is Boot.Failed) {
+            _boot.value = Boot.Loading
+            bootApp()
+        }
     }
 }

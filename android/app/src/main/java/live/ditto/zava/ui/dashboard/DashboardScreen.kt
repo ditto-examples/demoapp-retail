@@ -172,11 +172,17 @@ class DashboardState {
         }
     }
 
-    fun stop() {
+    /// Observer-only teardown — startObservers calls this (stop() would
+    /// cancel the very coroutine startObservers is running on).
+    private fun cancelObservers() {
         observers.forEach { it.close() }
         observers.clear()
         topProductsObserver?.close()
         topProductsObserver = null
+    }
+
+    fun stop() {
+        cancelObservers()
         restartJob?.cancel()
         restartJob = null
         loadedFor = null
@@ -199,37 +205,37 @@ class DashboardState {
     }
 
     private fun startObservers(appState: AppState) {
-        stop()
+        cancelObservers() // NOT stop() — that would cancel our own coroutine
         val storeId = appState.selectedStoreId.value ?: return
+        // Register one at a time INTO the tracked list: if any registration
+        // throws, the earlier observers stay tracked (stop() can close them)
+        // instead of leaking as anonymous live observers (adversarial review:
+        // batch `+= listOf(...)` dropped partial registrations untracked).
         try {
-            observers += listOf(
-                DittoManager.observe<StatusRevenueRow>(
-                    DashboardQueries.statusRevenue.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows ->
-                    statusRows = rows.filter { it.status != null }.sortedByDescending { it.orders }
-                },
-                DittoManager.observe<MonthTrendRow>(
-                    DashboardQueries.monthlyTrend.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows -> monthRows = rows.filter { it.month != null } },
-                DittoManager.observe<CountRow>(
-                    DashboardQueries.lowStock.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows -> lowStockCount = rows.firstOrNull()?.count ?: 0 },
-                DittoManager.observe<InventoryItem>(
-                    DashboardQueries.lowStockItems.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows -> lowStockItems = rows },
-            )
+            observers += DittoManager.observe<StatusRevenueRow>(
+                DashboardQueries.statusRevenue.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows ->
+                statusRows = rows.filter { it.status != null }.sortedByDescending { it.orders }
+            }
+            observers += DittoManager.observe<MonthTrendRow>(
+                DashboardQueries.monthlyTrend.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows -> monthRows = rows.filter { it.month != null } }
+            observers += DittoManager.observe<CountRow>(
+                DashboardQueries.lowStock.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows -> lowStockCount = rows.firstOrNull()?.count ?: 0 }
+            observers += DittoManager.observe<InventoryItem>(
+                DashboardQueries.lowStockItems.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows -> lowStockItems = rows }
             // Shared-catalog observers (no store arg).
-            observers += listOf(
-                DittoManager.observe<CountRow>(DashboardQueries.customersCount) { rows ->
-                    customersCount = rows.firstOrNull()?.count ?: 0
-                },
-                DittoManager.observe<CountRow>(DashboardQueries.productsCount) { rows ->
-                    productsCount = rows.firstOrNull()?.count ?: 0
-                },
-                DittoManager.observe<Product>(DashboardQueries.productsCatalog) { products ->
-                    productNames = products.associate { it.product_id to it.product_name }
-                },
-            )
+            observers += DittoManager.observe<CountRow>(DashboardQueries.customersCount) { rows ->
+                customersCount = rows.firstOrNull()?.count ?: 0
+            }
+            observers += DittoManager.observe<CountRow>(DashboardQueries.productsCount) { rows ->
+                productsCount = rows.firstOrNull()?.count ?: 0
+            }
+            observers += DittoManager.observe<Product>(DashboardQueries.productsCatalog) { products ->
+                productNames = products.associate { it.product_id to it.product_name }
+            }
             topProductsObserver = DittoManager.observe<TopProductRow>(
                 DashboardQueries.topProducts(topProductsLimit).trimIndent(), mapOf("storeId" to storeId),
             ) { rows -> topProducts = rows.filter { it.product_id != null } }

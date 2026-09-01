@@ -1,5 +1,6 @@
 package live.ditto.zava
 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import live.ditto.zava.model.BenchmarkRunner
 import live.ditto.zava.model.BenchmarkEntry
@@ -75,6 +76,11 @@ class RunnerTests {
         )
         val prepared = QueryPreparation.prepare("customers__evict__by_id", e, storeId = "store_seattle", runId = "run7")
         assertEquals(listOf("DELETE FROM customers WHERE _id = 'bench-run7-cust-evict-uuid'"), prepared.postQueries)
+        // preQueries get the same transform (dropping that map must fail loudly).
+        assertEquals(
+            listOf("INSERT INTO customers DOCUMENTS(deserialize_json('{\"_id\":\"bench-run7-cust-evict-uuid\"}'))"),
+            prepared.preQueries,
+        )
     }
 
     @Test
@@ -156,6 +162,29 @@ class RunnerTests {
         assertEquals(listOf("CREATE INDEX a", "SELECT 1", "SELECT 1", "SELECT 1", "DROP INDEX a"), calls)
         assertEquals(3, result.iterations)
         assertEquals(7, result.resultCount)
+    }
+
+    /// Navigating away mid-run cancels the calling coroutine — cleanup must
+    /// STILL run (the synthetic doc must not stay on Big Peer). The
+    /// delay-before-record ordering makes this test fail against the pre-fix
+    /// runner (the cancelled context throws before cleanup is ever recorded).
+    @Test
+    fun orchestrationRunsCleanupOnCancellation() = runTest {
+        val calls = mutableListOf<String>()
+        val job = launch {
+            BenchmarkRunner.runOrchestrated(
+                prepared(query = "INSERT timed", post = listOf("DELETE cleanup"), category = "INSERT"),
+                iterations = 50,
+            ) { query ->
+                kotlinx.coroutines.delay(10) // throws if the calling coroutine is cancelled
+                calls += query
+                1
+            }
+        }
+        kotlinx.coroutines.delay(45) // a few iterations in
+        job.cancel()
+        job.join()
+        assertTrue("cleanup must run even when the run is cancelled mid-flight", calls.contains("DELETE cleanup"))
     }
 
     @Test

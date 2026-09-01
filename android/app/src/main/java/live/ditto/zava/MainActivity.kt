@@ -188,7 +188,7 @@ private fun AppRoot(appState: AppState) {
                         }
                     }
                     AppState.Boot.MissingConfig -> MissingConfigScreen()
-                    is AppState.Boot.Failed -> ErrorScreen(state.message)
+                    is AppState.Boot.Failed -> ErrorScreen(state.message, onRetry = { appState.retryBoot() })
                     AppState.Boot.Ready -> if (selectedStoreId == null) {
                         StorePickerScreen(appState)
                     } else {
@@ -248,7 +248,7 @@ private fun MissingConfigScreen() {
 }
 
 @Composable
-private fun ErrorScreen(message: String) {
+private fun ErrorScreen(message: String, onRetry: () -> Unit) {
     val colors = DittoColors.current
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(
@@ -257,6 +257,7 @@ private fun ErrorScreen(message: String) {
         ) {
             Text("Ditto failed to start", style = MaterialTheme.typography.titleLarge, color = colors.foregroundNormal)
             Text(message, style = MaterialTheme.typography.bodyMedium, color = colors.foregroundSubtle, textAlign = TextAlign.Center)
+            live.ditto.zava.ui.components.DittoButton("Retry", testTag = "boot.retry", onClick = onRetry)
         }
     }
 }

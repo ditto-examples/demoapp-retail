@@ -1,5 +1,8 @@
 package live.ditto.zava.model
 
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+
 /// SDK-decoupled benchmark orchestration (unit tests drive it with a fake
 /// executor): preQueries run once → timed iterations (break on first error) →
 /// postQueries ALWAYS run. Iteration error outranks cleanup error.
@@ -25,13 +28,21 @@ object BenchmarkRunner {
             }
             durationsMs += (System.nanoTime() - start) / 1_000_000.0
         }
-        var cleanupError: Throwable? = null
-        for (query in prepared.postQueries) {
-            try {
-                execute(query)
-            } catch (e: Throwable) {
-                cleanupError = e
+        // Cleanup runs even when the CALLING coroutine was cancelled mid-run
+        // (navigating away from a mutating benchmark): without NonCancellable
+        // every cleanup execute would throw before touching Ditto, stranding
+        // the synthetic doc on Big Peer. A cleanup error never masks the
+        // iteration error.
+        val cleanupError: Throwable? = withContext(NonCancellable) {
+            var first: Throwable? = null
+            for (query in prepared.postQueries) {
+                try {
+                    execute(query)
+                } catch (e: Throwable) {
+                    first = e
+                }
             }
+            first
         }
         iterationError?.let { throw it }
         cleanupError?.let { throw it }

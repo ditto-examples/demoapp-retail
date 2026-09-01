@@ -292,35 +292,38 @@ private fun DashboardHeader(
 ) {
     val colors = DittoColors.current
     var menuOpen by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    BoxWithConstraints {
+        // Below ~400dp (folded cover) the location would squeeze to an
+        // unreadable sliver next to the logo — drop it, keep store + logo.
+        val showLocation = maxWidth > 400.dp
         Row(verticalAlignment = Alignment.CenterVertically) {
-        Box {
-            TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("storeSwitcher")) {
-                Text(
-                    store?.store_name ?: selectedStoreId ?: "—",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.foregroundNormal,
-                )
-                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = colors.foregroundSubtle)
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                stores.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.store_name) },
-                        trailingIcon = {
-                            if (option.store_id == selectedStoreId) {
-                                Icon(Icons.Filled.Check, contentDescription = null)
-                            }
-                        },
-                        onClick = {
-                            menuOpen = false
-                            if (option.store_id != selectedStoreId) appState.selectStore(option.store_id)
-                        },
+            Box {
+                TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("storeSwitcher")) {
+                    Text(
+                        store?.store_name ?: selectedStoreId ?: "—",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.foregroundNormal,
                     )
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = colors.foregroundSubtle)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    stores.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.store_name) },
+                            trailingIcon = {
+                                if (option.store_id == selectedStoreId) {
+                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                }
+                            },
+                            onClick = {
+                                menuOpen = false
+                                if (option.store_id != selectedStoreId) appState.selectStore(option.store_id)
+                            },
+                        )
+                    }
                 }
             }
-        }
-            if (store != null) {
+            if (store != null && showLocation) {
                 val location = if (store.location.address == "n/a") {
                     "${store.location.city}, ${store.location.state}"
                 } else {
@@ -350,47 +353,42 @@ private fun DashboardHeader(
     }
 }
 
-/// Centered, width-capped row of four equal-width KPI cards (2×2 below
-/// 900dp — the width check is what handles narrow windows, mirroring the
-/// iOS/macOS grid). Ghost cards while the snapshot belongs to another store.
+/// Centered, width-capped KPI grid: 4-up on wide layouts, 2×2 below 900dp,
+/// ONE card per row below 500dp (Compose has no minimumScaleFactor — at
+/// ~160dp card width on folded-cover-size screens the revenue value would
+/// ellipsize, so narrow screens stack). Ghost cards while the snapshot
+/// belongs to another store.
 @Composable
 private fun KpiGrid(state: DashboardState, stale: Boolean) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val twoColumns = maxWidth < 900.dp
+        val columnCount = when {
+            maxWidth < 500.dp -> 1
+            maxWidth < 900.dp -> 2
+            else -> 4
+        }
+        val cells: List<@Composable (Modifier) -> Unit> = if (stale) {
+            List(4) { { m -> SkeletonCard(m) } }
+        } else {
+            listOf(
+                { m -> KpiCard(m, "Orders", state.statusRows.sumOf { it.orders }.formatted(), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.orders") },
+                { m -> KpiCard(m, "Revenue (all time)", Formatters.usd(state.statusRows.sumOf { it.revenue ?: 0.0 }), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.revenue") },
+                { m -> KpiCard(m, "Customers synced", state.customersCount?.formatted() ?: "…", DashboardQueries.customersCount, Explanations.customersCount, "kpi.customers") },
+                { m -> KpiCard(m, "Catalog products", state.productsCount?.formatted() ?: "…", DashboardQueries.productsCount, Explanations.productsCount, "kpi.products") },
+            )
+        }
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(
                 modifier = Modifier.widthIn(max = 1400.dp).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (stale) {
-                    if (twoColumns) {
-                        KpiRow { SkeletonCard(Modifier.weight(1f)); SkeletonCard(Modifier.weight(1f)) }
-                        KpiRow { SkeletonCard(Modifier.weight(1f)); SkeletonCard(Modifier.weight(1f)) }
-                    } else {
-                        KpiRow { repeat(4) { SkeletonCard(Modifier.weight(1f)) } }
-                    }
-                } else {
-                    val cards = listOf<@Composable (Modifier) -> Unit>(
-                        { m -> KpiCard(m, "Orders", state.statusRows.sumOf { it.orders }.formatted(), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.orders") },
-                        { m -> KpiCard(m, "Revenue (all time)", Formatters.usd(state.statusRows.sumOf { it.revenue ?: 0.0 }), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.revenue") },
-                        { m -> KpiCard(m, "Customers synced", state.customersCount?.formatted() ?: "…", DashboardQueries.customersCount, Explanations.customersCount, "kpi.customers") },
-                        { m -> KpiCard(m, "Catalog products", state.productsCount?.formatted() ?: "…", DashboardQueries.productsCount, Explanations.productsCount, "kpi.products") },
-                    )
-                    if (twoColumns) {
-                        KpiRow { cards[0](Modifier.weight(1f)); cards[1](Modifier.weight(1f)) }
-                        KpiRow { cards[2](Modifier.weight(1f)); cards[3](Modifier.weight(1f)) }
-                    } else {
-                        KpiRow { cards.forEach { it(Modifier.weight(1f)) } }
+                cells.chunked(columnCount).forEach { rowCells ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        rowCells.forEach { cell -> cell(Modifier.weight(1f)) }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun KpiRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = content)
 }
 
 @Composable

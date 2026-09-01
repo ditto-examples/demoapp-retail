@@ -314,6 +314,8 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
         Row(
             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            // M3 list-item spacing: 16dp between label text and the control.
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 "Recent only (last 30 days of data)",

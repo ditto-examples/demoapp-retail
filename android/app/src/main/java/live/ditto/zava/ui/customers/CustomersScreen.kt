@@ -210,6 +210,8 @@ fun CustomersScreen(appState: AppState, modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            // M3 list-item spacing: 16dp between label text and the control.
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 "This store only",

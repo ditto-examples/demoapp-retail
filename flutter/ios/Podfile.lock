@@ -1,0 +1,35 @@
+PODS:
+  - ditto_flutter_tools (1.0.0):
+    - Flutter
+  - ditto_live (5.1.0):
+    - DittoFlutter (= 5.1.0)
+    - Flutter
+  - DittoFlutter (5.1.0)
+  - Flutter (1.0.0)
+
+DEPENDENCIES:
+  - ditto_flutter_tools (from `.symlinks/plugins/ditto_flutter_tools/ios`)
+  - ditto_live (from `.symlinks/plugins/ditto_live/ios`)
+  - Flutter (from `Flutter`)
+
+SPEC REPOS:
+  trunk:
+    - DittoFlutter
+
+EXTERNAL SOURCES:
+  ditto_flutter_tools:
+    :path: ".symlinks/plugins/ditto_flutter_tools/ios"
+  ditto_live:
+    :path: ".symlinks/plugins/ditto_live/ios"
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  ditto_flutter_tools: 6efa81c5bd5a44d3a94bcd2e406a5fe4583b53ba
+  ditto_live: c2e0f508f41e7abac114e23b2e76a6b54d3bb8ce
+  DittoFlutter: 51d05a6d8b92a20efa035d8a4aae86afc2e43a66
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+
+PODFILE CHECKSUM: 3ba3a73b1b12adcf321a227a745625fe0888cc82
+
+COCOAPODS: 1.17.0

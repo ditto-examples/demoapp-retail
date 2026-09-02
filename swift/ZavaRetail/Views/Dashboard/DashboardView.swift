@@ -97,6 +97,7 @@ final class DashboardState {
 
     private var observers: [DittoStoreObserver] = []
     private var topProductsObserver: DittoStoreObserver?
+    private var topProductsTask: Task<Void, Never>?
     private(set) var loadedFor: String?
     private var restartTask: Task<Void, Never>?
 
@@ -135,23 +136,37 @@ final class DashboardState {
         }
     }
 
-    func stop() {
+    /// Observer-only teardown — startObservers calls this (stop() would
+    /// cancel the very task startObservers is running on, and the
+    /// cancellation checkpoints would then abort the registration sequence).
+    private func cancelObservers() {
         observers.forEach { $0.cancel() }
         observers = []
         topProductsObserver?.cancel()
         topProductsObserver = nil
+    }
+
+    func stop() {
+        cancelObservers()
+        topProductsTask?.cancel()
+        topProductsTask = nil
         restartTask?.cancel()
         restartTask = nil
         loadedFor = nil
     }
 
-    /// The Top-N pull-down re-registers just the top-products observer.
+    /// The Top-N pull-down re-registers just the top-products observer —
+    /// serialized through its own task chain (two rapid picks must not leak
+    /// one observer or let two LIMITs fight over the card).
     func setTopProductsLimit(_ limit: Int, appState: AppState) {
         topProductsLimit = limit
-        guard let storeId = appState.selectedStoreId else { return }
-        Task {
+        let previous = topProductsTask
+        topProductsTask = Task { [weak self] in
+            await previous?.value
+            guard !Task.isCancelled, let self else { return }
             topProductsObserver?.cancel()
             topProductsObserver = nil
+            guard let storeId = appState.selectedStoreId else { return }
             do {
                 topProductsObserver = try await DittoManager.shared.observe(
                     DashboardQueries.topProducts(limit: limit),
@@ -160,76 +175,113 @@ final class DashboardState {
                 ) { [weak self] rows in
                     self?.topProducts = rows.filter { $0.product_id != nil }
                 }
+            } catch is CancellationError {
             } catch {
                 self.error = error.localizedDescription
             }
         }
     }
 
+    /// Register SEQUENTIALLY into a local, with cancellation checkpoints: an
+    /// array-literal registration leaks every already-registered observer if
+    /// a later element throws, and a teardown mid-literal strands them all
+    /// (adversarial review). Partials are cancelled on any failure.
     private func startObservers(appState: AppState) async {
-        stop()
+        cancelObservers() // NOT stop() — that would cancel our own task
         guard let storeId = appState.selectedStoreId else { return }
         let manager = DittoManager.shared
+        var registered: [DittoStoreObserver] = []
+        var topProducts: DittoStoreObserver?
         do {
-            observers = try await [
-                manager.observe(
-                    DashboardQueries.statusRevenue,
-                    arguments: ["storeId": storeId], as: StatusRevenueRow.self
-                ) { [weak self] rows in
-                    self?.statusRows = rows.filter { $0.status != nil }.sorted { $0.orders > $1.orders }
-                },
-                manager.observe(
-                    DashboardQueries.monthlyTrend,
-                    arguments: ["storeId": storeId], as: MonthTrendRow.self
-                ) { [weak self] rows in
-                    self?.monthRows = rows.filter { $0.month != nil }
-                },
-                manager.observe(
-                    DashboardQueries.lowStock,
-                    arguments: ["storeId": storeId], as: CountRow.self
-                ) { [weak self] rows in
-                    self?.lowStockCount = rows.first?.count ?? 0
-                },
-                manager.observe(
-                    DashboardQueries.lowStockItems,
-                    arguments: ["storeId": storeId], as: InventoryItem.self
-                ) { [weak self] rows in
-                    self?.lowStockItems = rows
-                }
-            ]
-            observers += try await registerCatalogObservers(manager: manager)
-            topProductsObserver = try await manager.observe(
+            try await registerStoreObservers(into: &registered, manager: manager, storeId: storeId)
+            try await registerCatalogObservers(into: &registered, manager: manager)
+            topProducts = try await manager.observe(
                 DashboardQueries.topProducts(limit: topProductsLimit),
                 arguments: ["storeId": storeId],
                 as: TopProductRow.self
             ) { [weak self] rows in
                 self?.topProducts = rows.filter { $0.product_id != nil }
             }
+            observers = registered
+            topProductsObserver = topProducts
             loadedFor = storeId
             error = nil
             Logger.sync.info("dashboard observers registered for \(storeId, privacy: .public)")
         } catch is CancellationError {
-            // View torn down mid-start — not an error state.
+            // View torn down mid-start — cancel the partials, not an error.
+            registered.forEach { $0.cancel() }
+            topProducts?.cancel()
         } catch {
+            registered.forEach { $0.cancel() }
+            topProducts?.cancel()
             Logger.sync.error("dashboard start failed: \(error.localizedDescription, privacy: .public)")
             self.error = error.localizedDescription
         }
     }
 
+    /// The four store-scoped card observers, appended into `registered` with
+    /// cancellation checkpoints (a teardown mid-sequence cancels partials).
+    private func registerStoreObservers(
+        into registered: inout [DittoStoreObserver],
+        manager: DittoManager,
+        storeId: String
+    ) async throws {
+        try await registered.append(manager.observe(
+            DashboardQueries.statusRevenue,
+            arguments: ["storeId": storeId], as: StatusRevenueRow.self
+        ) { [weak self] rows in
+            self?.statusRows = rows.filter { $0.status != nil }.sorted { $0.orders > $1.orders }
+        })
+        try Task.checkCancellation()
+        try await registered.append(manager.observe(
+            DashboardQueries.monthlyTrend,
+            arguments: ["storeId": storeId], as: MonthTrendRow.self
+        ) { [weak self] rows in
+            self?.monthRows = rows.filter { $0.month != nil }
+        })
+        try Task.checkCancellation()
+        try await registered.append(manager.observe(
+            DashboardQueries.lowStock,
+            arguments: ["storeId": storeId], as: CountRow.self
+        ) { [weak self] rows in
+            self?.lowStockCount = rows.first?.count ?? 0
+        })
+        try Task.checkCancellation()
+        try await registered.append(manager.observe(
+            DashboardQueries.lowStockItems,
+            arguments: ["storeId": storeId], as: InventoryItem.self
+        ) { [weak self] rows in
+            self?.lowStockItems = rows
+        })
+        try Task.checkCancellation()
+    }
+
     /// Shared-catalog observers (no store arg): the customers count, the
     /// catalog count, and the product id → name map.
-    private func registerCatalogObservers(manager: DittoManager) async throws -> [DittoStoreObserver] {
-        try await [
-            manager.observe(DashboardQueries.customersCount, as: CountRow.self) { [weak self] rows in
-                self?.customersCount = rows.first?.count ?? 0
-            },
-            manager.observe(DashboardQueries.productsCount, as: CountRow.self) { [weak self] rows in
-                self?.productsCount = rows.first?.count ?? 0
-            },
-            manager.observe(DashboardQueries.productsCatalog, as: Product.self) { [weak self] products in
-                self?.productNames = Dictionary(uniqueKeysWithValues: products.map { ($0.product_id, $0.product_name) })
-            }
-        ]
+    private func registerCatalogObservers(
+        into registered: inout [DittoStoreObserver],
+        manager: DittoManager
+    ) async throws {
+        try await registered.append(manager.observe(
+            DashboardQueries.customersCount, as: CountRow.self
+        ) { [weak self] rows in
+            self?.customersCount = rows.first?.count ?? 0
+        })
+        try Task.checkCancellation()
+        try await registered.append(manager.observe(
+            DashboardQueries.productsCount, as: CountRow.self
+        ) { [weak self] rows in
+            self?.productsCount = rows.first?.count ?? 0
+        })
+        try Task.checkCancellation()
+        try await registered.append(manager.observe(
+            DashboardQueries.productsCatalog, as: Product.self
+        ) { [weak self] products in
+            // Safe to trap on duplicate keys: the shared catalog is
+            // globally unique.
+            self?.productNames = Dictionary(uniqueKeysWithValues: products.map { ($0.product_id, $0.product_name) })
+        })
+        try Task.checkCancellation()
     }
 }
 

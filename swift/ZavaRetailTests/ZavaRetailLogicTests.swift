@@ -132,8 +132,10 @@ final class ZavaRetailLogicTests: XCTestCase {
 
     private actor CallRecorder {
         var calls: [String] = []
+        var count = 0
         func record(_ call: String) {
             calls.append(call)
+            count += 1
         }
     }
 
@@ -162,11 +164,10 @@ final class ZavaRetailLogicTests: XCTestCase {
             preQueries: ["INSERT seed"], query: "INSERT timed",
             postQueries: ["DELETE cleanup"], substitutions: []
         )
-        var count = 0
         do {
             _ = try await DittoManager.runBenchmarkOrchestrated(prepared, iterations: 5) { query in
                 await recorder.record(query)
-                count += 1
+                let count = await recorder.count
                 if query == "INSERT timed", count > 2 {
                     throw Boom()
                 }
@@ -181,6 +182,34 @@ final class ZavaRetailLogicTests: XCTestCase {
             calls,
             ["INSERT seed", "INSERT timed", "INSERT timed", "DELETE cleanup"],
             "cleanup must run even when a timed iteration fails"
+        )
+    }
+
+    /// Navigating away mid-run cancels the calling task — cleanup must STILL
+    /// run (the synthetic doc must not stay on Big Peer). The sleep-before-
+    /// record ordering makes this test fail against the pre-fix runner (the
+    /// cancelled task throws before the cleanup call is ever recorded).
+    func testBenchmarkOrchestrationRunsCleanupOnCancellation() async {
+        let recorder = CallRecorder()
+        let prepared = PreparedBenchmark(
+            name: "t", category: "INSERT", isMutating: true,
+            preQueries: [], query: "INSERT timed",
+            postQueries: ["DELETE cleanup"], substitutions: []
+        )
+        let task = Task {
+            try await DittoManager.runBenchmarkOrchestrated(prepared, iterations: 50) { query in
+                try await Task.sleep(for: .milliseconds(10)) // throws if the calling task is cancelled
+                await recorder.record(query)
+                return 1
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(55)) // a few iterations in
+        task.cancel()
+        _ = try? await task.value
+        let calls = await recorder.calls
+        XCTAssertTrue(
+            calls.contains("DELETE cleanup"),
+            "cleanup must run even when the run is cancelled mid-flight"
         )
     }
 

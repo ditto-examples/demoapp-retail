@@ -53,7 +53,7 @@ import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.DittoCard
 import live.ditto.zava.ui.components.PaginationBar
-import live.ditto.zava.ui.components.QueryInfoButton
+import live.ditto.zava.ui.components.PublishScreenInfo
 import live.ditto.zava.ui.components.SectionHeader
 import live.ditto.zava.ui.components.SkeletonRows
 import live.ditto.zava.ui.components.ZavaSearchField
@@ -299,6 +299,10 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
         }
     }
 
+    // The app bar carries this screen's info action (the in-row button didn't
+    // fit beside the toggle on narrow screens).
+    PublishScreenInfo(displayedQuery, ordersScreenExplanation)
+
     Column(modifier = modifier) {
         // Search is the standard field with the × clear affordance (parity
         // with the iOS .searchable control); debounced ILIKE in the state.
@@ -314,6 +318,8 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
         Row(
             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            // M3 list-item spacing: 16dp between label text and the control.
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 "Recent only (last 30 days of data)",
@@ -329,10 +335,6 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
                 },
             )
             Spacer(Modifier.weight(1f))
-            QueryInfoButton(
-                query = displayedQuery,
-                explanation = if (state.isSearching) searchExplanation else recentExplanation,
-            )
         }
         HorizontalDivider()
 
@@ -394,11 +396,8 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
 @kotlinx.serialization.Serializable
 private data class MaxDateRow(val max_date: String? = null)
 
-private const val recentExplanation =
-    "Filters to orders from the last 30 days OF THE DATASET — the benchmark's data ends 2025-06-27, so the cutoff is anchored to the newest synced order (max(order_date) − 30 days), not to today's date. A naive \"now minus 30 days\" filter would show zero rows in a demo. This is the benchmark's date-range query shape (orders__select__by_date_range) with a parameterized cutoff — the info sheet above shows the exact query running, cutoff included."
-
-private const val searchExplanation =
-    "While you type, the list is driven by this one-shot query (500 ms debounce) instead of the live paged observer. ILIKE is LIKE's case-insensitive variant, so partial order numbers and customer names match regardless of case. '%' and '_' in your input act as wildcards, and matches are capped at 50 rows. Search matches across all dates — it ignores the \"Recent only\" filter. Clear the field (the × button) to return to the live, paginated list."
+private const val ordersScreenExplanation =
+    "The orders list is a LIVE observer over this store's synced orders — new matches appear as sync delivers them, no refresh step. The query shown above is the exact one running (cutoff/args resolved).\n\nPagination is LIMIT/OFFSET in DQL: the visible slice runs ORDER BY order_date DESC, _id DESC LIMIT <pageSize> OFFSET <(page−1)×pageSize>, while a second live observer runs COUNT(*) over the same WHERE — so the page count climbs as sync delivers. The _id tiebreaker keeps OFFSET paging stable (no skipped or repeated rows across pages).\n\n\"Recent only\" anchors to max(order_date) IN THE DATA (the benchmark dataset ends 2025-06-27), not the device clock — a naive now-minus-30-days filter would show zero rows. Search runs one-shot case-insensitive ILIKE queries on order number and customer name (500 ms debounce, capped at 50 rows) — '%' and '_' in your input act as wildcards, and search matches across all dates (it ignores the \"Recent only\" filter); clear it (×) to return to the live paged list."
 
 @Composable
 private fun OrderRow(order: Order, onClick: () -> Unit) {
@@ -446,6 +445,8 @@ fun OrderDetailScreen(order: Order, modifier: Modifier = Modifier) {
     val colors = DittoColors.current
     var items by remember { mutableStateOf<List<OrderItem>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    PublishScreenInfo(OrderDetailQueries.itemsQuery, OrderDetailQueries.explanation)
 
     LaunchedEffect(order.id) {
         try {

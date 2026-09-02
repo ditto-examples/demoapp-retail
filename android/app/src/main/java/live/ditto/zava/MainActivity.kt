@@ -43,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -63,6 +65,8 @@ import live.ditto.zava.ui.ditto.DittoTabScreen
 import live.ditto.zava.ui.ditto.IndexesScreen
 import live.ditto.zava.ui.ditto.SyncStatusScreen
 import live.ditto.zava.ui.ditto.ToolsScreen
+import live.ditto.zava.ui.components.QueryInfoButton
+import live.ditto.zava.ui.components.ScreenInfoBus
 import live.ditto.zava.ui.orders.OrderDetailScreen
 import live.ditto.zava.ui.orders.OrdersScreen
 import live.ditto.zava.ui.picker.StorePickerScreen
@@ -184,7 +188,7 @@ private fun AppRoot(appState: AppState) {
                         }
                     }
                     AppState.Boot.MissingConfig -> MissingConfigScreen()
-                    is AppState.Boot.Failed -> ErrorScreen(state.message)
+                    is AppState.Boot.Failed -> ErrorScreen(state.message, onRetry = { appState.retryBoot() })
                     AppState.Boot.Ready -> if (selectedStoreId == null) {
                         StorePickerScreen(appState)
                     } else {
@@ -244,7 +248,7 @@ private fun MissingConfigScreen() {
 }
 
 @Composable
-private fun ErrorScreen(message: String) {
+private fun ErrorScreen(message: String, onRetry: () -> Unit) {
     val colors = DittoColors.current
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(
@@ -253,6 +257,7 @@ private fun ErrorScreen(message: String) {
         ) {
             Text("Ditto failed to start", style = MaterialTheme.typography.titleLarge, color = colors.foregroundNormal)
             Text(message, style = MaterialTheme.typography.bodyMedium, color = colors.foregroundSubtle, textAlign = TextAlign.Center)
+            live.ditto.zava.ui.components.DittoButton("Retry", testTag = "boot.retry", onClick = onRetry)
         }
     }
 }
@@ -288,7 +293,18 @@ private fun MainTabs(appState: AppState) {
                             Icon(tab.icon!!, contentDescription = tab.label)
                         }
                     },
-                    label = { Text(tab.label) },
+                    label = {
+                        // "Customers" is the long pole: on narrow bars (folded
+                        // cover display) the default label size wraps it to a
+                        // second line. One line, slightly smaller, ellipsize
+                        // as the degradation mode — never a wrap.
+                        Text(
+                            tab.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                        )
+                    },
                 )
             }
         },
@@ -302,6 +318,17 @@ private fun MainTabs(appState: AppState) {
                             IconButton(onClick = { backStack.removeAt(backStack.lastIndex) }) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
+                        }
+                    },
+                    actions = {
+                        // The screen's info action (right side) — each screen
+                        // publishes its explainer + the ACTUAL DQL running.
+                        ScreenInfoBus.current?.let { (query, explanation) ->
+                            QueryInfoButton(
+                                query = query,
+                                explanation = explanation,
+                                contentDescription = "About this screen",
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.surface),

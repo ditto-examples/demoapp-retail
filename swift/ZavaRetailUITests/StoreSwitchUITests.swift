@@ -14,6 +14,11 @@ final class StoreSwitchUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Dashboard"].waitForExistence(timeout: 60))
         let kpi = app.staticTexts["kpi.orders"]
         XCTAssertTrue(kpi.waitForExistence(timeout: 60))
+        // Seattle's settled value, captured pre-switch: the post-switch
+        // recovery must differ from it (stale Seattle data would ALSO be
+        // non-zero — a bare "recovers to non-zero" assertion can't tell
+        // recovered from stale).
+        let seattleValue = Int(kpi.label.replacingOccurrences(of: ",", with: "")) ?? -1
 
         // Switch via the dashboard header switcher.
         let switcher = app.buttons["storeSwitcher"]
@@ -37,15 +42,19 @@ final class StoreSwitchUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 5)
         XCTAssertFalse(badText.exists, "unexpected error text after store switch: \(badText.label)")
 
-        // And the KPI recovers for Bellevue (its slice has orders).
-        let nonZero = NSPredicate { _, _ in
-            Int(kpi.label.replacingOccurrences(of: ",", with: "")) ?? 0 > 0
+        // And the KPI recovers for Bellevue with BELLEVUE'S value — the two
+        // stores have different order counts on the 100k slice, so settling
+        // on a different non-zero value proves the dashboard isn't showing
+        // the old store's snapshot.
+        let recovered = NSPredicate { _, _ in
+            let value = Int(kpi.label.replacingOccurrences(of: ",", with: "")) ?? -1
+            return value > 0 && value != seattleValue
         }
-        let expectation = XCTNSPredicateExpectation(predicate: nonZero, object: nil)
+        let expectation = XCTNSPredicateExpectation(predicate: recovered, object: nil)
         XCTAssertEqual(
             XCTWaiter.wait(for: [expectation], timeout: 300),
             .completed,
-            "Bellevue's orders KPI should recover after the switch"
+            "Bellevue's orders KPI should recover with its own value after the switch (Seattle's was \(seattleValue))"
         )
     }
 }

@@ -42,6 +42,7 @@ import live.ditto.zava.state.AppState
 import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.PaginationBar
+import live.ditto.zava.ui.components.PublishScreenInfo
 import live.ditto.zava.ui.components.SkeletonRows
 import live.ditto.zava.ui.components.ZavaSearchField
 import live.ditto.zava.ui.formatted
@@ -60,6 +61,10 @@ class CustomersState {
     var searchText by mutableStateOf("")
     var searchResults by mutableStateOf<List<Customer>?>(null)
     var error by mutableStateOf<String?>(null)
+
+    /// The exact paged query currently observed (store arg resolved inline) —
+    /// the app bar's info sheet shows this, not a template.
+    var activeQuery by mutableStateOf("")
 
     private var pageObserver: DittoStoreObserver? = null
     private var countObserver: DittoStoreObserver? = null
@@ -84,7 +89,7 @@ class CustomersState {
         const val emailQuery = "SELECT * FROM customers WHERE email = :email AND deleted = false"
         const val nameQuery = """
             SELECT * FROM customers WHERE deleted = false
-            AND (first_name LIKE :like OR last_name LIKE :like) ORDER BY last_name LIMIT 50
+            AND (first_name ILIKE :like OR last_name ILIKE :like) ORDER BY last_name LIMIT 50
         """
     }
 
@@ -141,13 +146,27 @@ class CustomersState {
         try {
             countObserver = DittoManager.observe<CountRow>(
                 "SELECT COUNT(*) AS count $where", arguments,
-            ) { rows -> totalCount = rows.firstOrNull()?.count ?: 0 }
+            ) { rows ->
+                totalCount = rows.firstOrNull()?.count ?: 0
+                // Count shrank under the current page — clamp and restart, or
+                // the OFFSET page returns nothing and skeletons sit forever.
+                val clamped = Paging.clampPage(page, totalCount, pageSize)
+                if (clamped != page) {
+                    page = clamped
+                    restart(appState)
+                }
+            }
             val pageQuery = Paging.pageQuery(
                 base = "SELECT * $where",
                 orderBy = "last_name, first_name, _id",
                 page = page,
                 pageSize = pageSize,
             )
+            activeQuery = if (thisStoreOnly && storeId != null) {
+                pageQuery.replace(":storeId", "'$storeId'")
+            } else {
+                pageQuery
+            }
             pageObserver = DittoManager.observe<Customer>(pageQuery, arguments) { customers = it }
             error = null
         } catch (e: Exception) {
@@ -181,11 +200,19 @@ class CustomersState {
     }
 }
 
+private const val customersScreenExplanation =
+    "The 25K-row customer directory is subscribed UNFILTERED (the benchmark's subscription__customers_all — a walk-in could be anyone), so this screen pages entirely on-device: LIMIT/OFFSET for the slice (ORDER BY last_name, first_name, _id) plus a live COUNT(*) observer for the total — the query above is the exact paged query running now.\n\n\"This store only\" filters IN the query (primary_store_id = your store — the benchmark's customers__select__by_primary_store_id shape), not in memory. Search: an '@' runs an exact-email lookup (customers__select__by_email — run its indexed/no-index pair side by side in the Query Runner); otherwise a name-prefix LIKE on first/last name, first 50 matches."
+
 @Composable
 fun CustomersScreen(appState: AppState, modifier: Modifier = Modifier) {
     val state = remember { CustomersState() }
     val selectedStoreId by appState.selectedStoreId.collectAsStateWithLifecycle()
     val colors = DittoColors.current
+
+    PublishScreenInfo(
+        state.activeQuery.ifEmpty { "SELECT * ${CustomersState.directoryWhere} ORDER BY last_name, first_name, _id" },
+        customersScreenExplanation,
+    )
 
     LaunchedEffect(Unit) { state.start(appState) }
     DisposableEffect(Unit) { onDispose { state.stop() } }
@@ -210,6 +237,8 @@ fun CustomersScreen(appState: AppState, modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            // M3 list-item spacing: 16dp between label text and the control.
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
                 "This store only",

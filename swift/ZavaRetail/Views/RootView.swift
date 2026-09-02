@@ -15,11 +15,20 @@ struct RootView: View {
             case .missingConfig:
                 MissingConfigView()
             case let .failed(message):
-                ContentUnavailableView(
-                    "Ditto failed to start",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(message)
-                )
+                // Boot failures are transient as often as not — offer retry
+                // (DittoManager.open() was built to retry cleanly; the UI
+                // should take advantage of it).
+                VStack(spacing: 16) {
+                    ContentUnavailableView(
+                        "Ditto failed to start",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(message)
+                    )
+                    AnvilButton("Retry") {
+                        appState.retryBoot()
+                    }
+                    .accessibilityIdentifier("boot.retry")
+                }
             case .ready:
                 if appState.selectedStoreId == nil {
                     StorePickerView()

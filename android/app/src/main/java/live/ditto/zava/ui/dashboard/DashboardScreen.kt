@@ -57,6 +57,7 @@ import live.ditto.zava.ui.Formatters
 import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.DittoCard
+import live.ditto.zava.ui.components.PublishScreenInfo
 import live.ditto.zava.ui.components.QueryInfoButton
 import live.ditto.zava.ui.components.SectionHeader
 import live.ditto.zava.ui.components.SkeletonCard
@@ -171,11 +172,17 @@ class DashboardState {
         }
     }
 
-    fun stop() {
+    /// Observer-only teardown — startObservers calls this (stop() would
+    /// cancel the very coroutine startObservers is running on).
+    private fun cancelObservers() {
         observers.forEach { it.close() }
         observers.clear()
         topProductsObserver?.close()
         topProductsObserver = null
+    }
+
+    fun stop() {
+        cancelObservers()
         restartJob?.cancel()
         restartJob = null
         loadedFor = null
@@ -198,37 +205,37 @@ class DashboardState {
     }
 
     private fun startObservers(appState: AppState) {
-        stop()
+        cancelObservers() // NOT stop() — that would cancel our own coroutine
         val storeId = appState.selectedStoreId.value ?: return
+        // Register one at a time INTO the tracked list: if any registration
+        // throws, the earlier observers stay tracked (stop() can close them)
+        // instead of leaking as anonymous live observers (adversarial review:
+        // batch `+= listOf(...)` dropped partial registrations untracked).
         try {
-            observers += listOf(
-                DittoManager.observe<StatusRevenueRow>(
-                    DashboardQueries.statusRevenue.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows ->
-                    statusRows = rows.filter { it.status != null }.sortedByDescending { it.orders }
-                },
-                DittoManager.observe<MonthTrendRow>(
-                    DashboardQueries.monthlyTrend.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows -> monthRows = rows.filter { it.month != null } },
-                DittoManager.observe<CountRow>(
-                    DashboardQueries.lowStock.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows -> lowStockCount = rows.firstOrNull()?.count ?: 0 },
-                DittoManager.observe<InventoryItem>(
-                    DashboardQueries.lowStockItems.trimIndent(), mapOf("storeId" to storeId),
-                ) { rows -> lowStockItems = rows },
-            )
+            observers += DittoManager.observe<StatusRevenueRow>(
+                DashboardQueries.statusRevenue.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows ->
+                statusRows = rows.filter { it.status != null }.sortedByDescending { it.orders }
+            }
+            observers += DittoManager.observe<MonthTrendRow>(
+                DashboardQueries.monthlyTrend.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows -> monthRows = rows.filter { it.month != null } }
+            observers += DittoManager.observe<CountRow>(
+                DashboardQueries.lowStock.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows -> lowStockCount = rows.firstOrNull()?.count ?: 0 }
+            observers += DittoManager.observe<InventoryItem>(
+                DashboardQueries.lowStockItems.trimIndent(), mapOf("storeId" to storeId),
+            ) { rows -> lowStockItems = rows }
             // Shared-catalog observers (no store arg).
-            observers += listOf(
-                DittoManager.observe<CountRow>(DashboardQueries.customersCount) { rows ->
-                    customersCount = rows.firstOrNull()?.count ?: 0
-                },
-                DittoManager.observe<CountRow>(DashboardQueries.productsCount) { rows ->
-                    productsCount = rows.firstOrNull()?.count ?: 0
-                },
-                DittoManager.observe<Product>(DashboardQueries.productsCatalog) { products ->
-                    productNames = products.associate { it.product_id to it.product_name }
-                },
-            )
+            observers += DittoManager.observe<CountRow>(DashboardQueries.customersCount) { rows ->
+                customersCount = rows.firstOrNull()?.count ?: 0
+            }
+            observers += DittoManager.observe<CountRow>(DashboardQueries.productsCount) { rows ->
+                productsCount = rows.firstOrNull()?.count ?: 0
+            }
+            observers += DittoManager.observe<Product>(DashboardQueries.productsCatalog) { products ->
+                productNames = products.associate { it.product_id to it.product_name }
+            }
             topProductsObserver = DittoManager.observe<TopProductRow>(
                 DashboardQueries.topProducts(topProductsLimit).trimIndent(), mapOf("storeId" to storeId),
             ) { rows -> topProducts = rows.filter { it.product_id != null } }
@@ -239,6 +246,9 @@ class DashboardState {
         }
     }
 }
+
+private const val dashboardScreenExplanation =
+    "Every card is a LIVE store observer, not a one-shot fetch — after a store switch the values climb as the new store syncs, and ghost cards cover the gap so you never see another store's rows. The KPI cards aggregate orders by status (COUNT + SUM, above with your store substituted); the trend groups orders into months with substr(order_date, 0, 7) (DQL's substr is zero-based); low stock rides the composite _id.store_id subfield; top products sums order_items line totals with product names resolved client-side (DQL v5.0 has no JOINs). Each card's own ⓘ shows the exact query behind it."
 
 private object Explanations {
     const val statusRevenue = "Counts this store's non-deleted orders and sums their totals, grouped by status. It's the benchmark's by-status aggregation scoped to your store — the same DQL shape the performance suite measures."
@@ -260,6 +270,12 @@ fun DashboardScreen(appState: AppState, modifier: Modifier = Modifier) {
         state.start(appState)
         onDispose { state.stop() }
     }
+
+    // The app bar carries this screen's info action; the headline KPI query
+    // with the selected store substituted (each card's own ⓘ shows its query).
+    val infoQuery = DashboardQueries.statusRevenue.trimIndent()
+        .replace(":storeId", "'${selectedStoreId ?: "store_seattle"}'")
+    PublishScreenInfo(infoQuery, dashboardScreenExplanation)
 
     val colors = DittoColors.current
     val store = stores.firstOrNull { it.store_id == selectedStoreId }
@@ -292,35 +308,38 @@ private fun DashboardHeader(
 ) {
     val colors = DittoColors.current
     var menuOpen by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    BoxWithConstraints {
+        // Below ~400dp (folded cover) the location would squeeze to an
+        // unreadable sliver next to the logo — drop it, keep store + logo.
+        val showLocation = maxWidth > 400.dp
         Row(verticalAlignment = Alignment.CenterVertically) {
-        Box {
-            TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("storeSwitcher")) {
-                Text(
-                    store?.store_name ?: selectedStoreId ?: "—",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.foregroundNormal,
-                )
-                Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = colors.foregroundSubtle)
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                stores.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text(option.store_name) },
-                        trailingIcon = {
-                            if (option.store_id == selectedStoreId) {
-                                Icon(Icons.Filled.Check, contentDescription = null)
-                            }
-                        },
-                        onClick = {
-                            menuOpen = false
-                            if (option.store_id != selectedStoreId) appState.selectStore(option.store_id)
-                        },
+            Box {
+                TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("storeSwitcher")) {
+                    Text(
+                        store?.store_name ?: selectedStoreId ?: "—",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.foregroundNormal,
                     )
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = colors.foregroundSubtle)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    stores.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.store_name) },
+                            trailingIcon = {
+                                if (option.store_id == selectedStoreId) {
+                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                }
+                            },
+                            onClick = {
+                                menuOpen = false
+                                if (option.store_id != selectedStoreId) appState.selectStore(option.store_id)
+                            },
+                        )
+                    }
                 }
             }
-        }
-            if (store != null) {
+            if (store != null && showLocation) {
                 val location = if (store.location.address == "n/a") {
                     "${store.location.city}, ${store.location.state}"
                 } else {
@@ -350,47 +369,42 @@ private fun DashboardHeader(
     }
 }
 
-/// Centered, width-capped row of four equal-width KPI cards (2×2 below
-/// 900dp — the width check is what handles narrow windows, mirroring the
-/// iOS/macOS grid). Ghost cards while the snapshot belongs to another store.
+/// Centered, width-capped KPI grid: 4-up on wide layouts, 2×2 below 900dp,
+/// ONE card per row below 500dp (Compose has no minimumScaleFactor — at
+/// ~160dp card width on folded-cover-size screens the revenue value would
+/// ellipsize, so narrow screens stack). Ghost cards while the snapshot
+/// belongs to another store.
 @Composable
 private fun KpiGrid(state: DashboardState, stale: Boolean) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val twoColumns = maxWidth < 900.dp
+        val columnCount = when {
+            maxWidth < 500.dp -> 1
+            maxWidth < 900.dp -> 2
+            else -> 4
+        }
+        val cells: List<@Composable (Modifier) -> Unit> = if (stale) {
+            List(4) { { m -> SkeletonCard(m) } }
+        } else {
+            listOf(
+                { m -> KpiCard(m, "Orders", state.statusRows.sumOf { it.orders }.formatted(), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.orders") },
+                { m -> KpiCard(m, "Revenue (all time)", Formatters.usd(state.statusRows.sumOf { it.revenue ?: 0.0 }), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.revenue") },
+                { m -> KpiCard(m, "Customers synced", state.customersCount?.formatted() ?: "…", DashboardQueries.customersCount, Explanations.customersCount, "kpi.customers") },
+                { m -> KpiCard(m, "Catalog products", state.productsCount?.formatted() ?: "…", DashboardQueries.productsCount, Explanations.productsCount, "kpi.products") },
+            )
+        }
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(
                 modifier = Modifier.widthIn(max = 1400.dp).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                if (stale) {
-                    if (twoColumns) {
-                        KpiRow { SkeletonCard(Modifier.weight(1f)); SkeletonCard(Modifier.weight(1f)) }
-                        KpiRow { SkeletonCard(Modifier.weight(1f)); SkeletonCard(Modifier.weight(1f)) }
-                    } else {
-                        KpiRow { repeat(4) { SkeletonCard(Modifier.weight(1f)) } }
-                    }
-                } else {
-                    val cards = listOf<@Composable (Modifier) -> Unit>(
-                        { m -> KpiCard(m, "Orders", state.statusRows.sumOf { it.orders }.formatted(), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.orders") },
-                        { m -> KpiCard(m, "Revenue (all time)", Formatters.usd(state.statusRows.sumOf { it.revenue ?: 0.0 }), DashboardQueries.statusRevenue.trimIndent(), Explanations.statusRevenue, "kpi.revenue") },
-                        { m -> KpiCard(m, "Customers synced", state.customersCount?.formatted() ?: "…", DashboardQueries.customersCount, Explanations.customersCount, "kpi.customers") },
-                        { m -> KpiCard(m, "Catalog products", state.productsCount?.formatted() ?: "…", DashboardQueries.productsCount, Explanations.productsCount, "kpi.products") },
-                    )
-                    if (twoColumns) {
-                        KpiRow { cards[0](Modifier.weight(1f)); cards[1](Modifier.weight(1f)) }
-                        KpiRow { cards[2](Modifier.weight(1f)); cards[3](Modifier.weight(1f)) }
-                    } else {
-                        KpiRow { cards.forEach { it(Modifier.weight(1f)) } }
+                cells.chunked(columnCount).forEach { rowCells ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        rowCells.forEach { cell -> cell(Modifier.weight(1f)) }
                     }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun KpiRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), content = content)
 }
 
 @Composable

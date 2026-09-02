@@ -56,6 +56,7 @@ import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 import live.ditto.zava.ui.components.DittoButton
 import live.ditto.zava.ui.components.DittoCard
+import live.ditto.zava.ui.components.SuppressScreenInfo
 import live.ditto.zava.ui.formatted
 import java.util.Locale
 import java.util.UUID
@@ -85,6 +86,9 @@ fun QueryCatalogScreen(onOpenBenchmark: (String) -> Unit, modifier: Modifier = M
     val context = LocalContext.current
     var catalog by remember { mutableStateOf<BenchmarkCatalog?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // No app-bar info here — the pushed catalog must not inherit the Ditto
+    // tab's entry from the screen-info stack.
+    SuppressScreenInfo()
 
     LaunchedEffect(Unit) {
         try {
@@ -158,6 +162,8 @@ fun BenchmarkDetailScreen(name: String, appState: AppState, modifier: Modifier =
 
     var entry by remember { mutableStateOf<BenchmarkEntry?>(null) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    // The DQL is already on this screen (query blocks) — no app-bar info here.
+    SuppressScreenInfo()
     LaunchedEffect(Unit) {
         try {
             entry = loadCatalog(context).entries.firstOrNull { it.first == name }?.second

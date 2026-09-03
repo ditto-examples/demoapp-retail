@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import live.ditto.zava.BuildConfig
 import live.ditto.zava.data.DatabaseConfig
 import live.ditto.zava.data.DittoManager
+import live.ditto.zava.model.MulticastConfig
 import live.ditto.zava.model.Store
 
 /// App-level state (1:1 port of the Swift reference's @MainActor AppState).
@@ -48,11 +49,44 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private val _ditto = MutableStateFlow<Ditto?>(null)
     val ditto: StateFlow<Ditto?> = _ditto.asStateFlow()
 
+    /// The multicast (beta) transport settings — persisted, applied to Ditto
+    /// after open and on every change.
+    private val _multicastConfig = MutableStateFlow(loadMulticastConfig())
+    val multicastConfig: StateFlow<MulticastConfig> = _multicastConfig.asStateFlow()
+
     private var storesObserver: DittoStoreObserver? = null
 
     companion object {
         private const val TAG = "AppState"
         const val KEY_SELECTED_STORE = "selectedStoreId"
+        private const val KEY_MULTICAST_ENABLED = "multicastEnabled"
+        private const val KEY_MULTICAST_GROUP = "multicastGroupAddress"
+        private const val KEY_MULTICAST_PORT = "multicastPort"
+        private const val KEY_MULTICAST_INTERFACE = "multicastInterfaceName"
+    }
+
+    private fun loadMulticastConfig(): MulticastConfig = MulticastConfig(
+        enabled = prefs.getBoolean(KEY_MULTICAST_ENABLED, false),
+        groupAddress = prefs.getString(KEY_MULTICAST_GROUP, null) ?: MulticastConfig.DEFAULT_GROUP_ADDRESS,
+        port = prefs.getInt(KEY_MULTICAST_PORT, MulticastConfig.DEFAULT_PORT),
+        interfaceName = prefs.getString(KEY_MULTICAST_INTERFACE, null)?.ifEmpty { null },
+    )
+
+    /// Persists + applies multicast settings to the live Ditto instance.
+    /// Validation failures surface in the banner, never crash.
+    fun setMulticastConfig(config: MulticastConfig) {
+        prefs.edit()
+            .putBoolean(KEY_MULTICAST_ENABLED, config.enabled)
+            .putString(KEY_MULTICAST_GROUP, config.groupAddress)
+            .putInt(KEY_MULTICAST_PORT, config.port)
+            .putString(KEY_MULTICAST_INTERFACE, config.interfaceName)
+            .apply()
+        _multicastConfig.value = config
+        try {
+            DittoManager.setMulticastConfig(config)
+        } catch (e: Exception) {
+            _lastError.value = "Multicast config failed: ${e.localizedMessage}"
+        }
     }
 
     init {
@@ -89,6 +123,16 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 }
                 _ditto.value = instance
                 Log.i(TAG, "Ditto open; sync started")
+                // Re-apply the persisted multicast (beta) setting to the fresh
+                // instance — transport config doesn't survive a new Ditto open.
+                if (_multicastConfig.value.enabled) {
+                    try {
+                        DittoManager.setMulticastConfig(_multicastConfig.value)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "multicast apply-at-open failed: ${e.localizedMessage}")
+                        _lastError.value = "Multicast config failed: ${e.localizedMessage}"
+                    }
+                }
                 storesObserver = DittoManager.observe<Store>("SELECT * FROM stores") { stores ->
                     Log.i(TAG, "stores observer fired: ${stores.size} stores")
                     _stores.value = stores.sortedBy { it.store_name }

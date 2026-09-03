@@ -1,6 +1,7 @@
 package live.ditto.zava.data
 
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.util.Log
 import com.ditto.kotlin.Ditto
 import com.ditto.kotlin.DittoAuthenticationProvider
@@ -22,6 +23,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import live.ditto.zava.model.AppError
 import live.ditto.zava.model.BenchmarkRunResult
+import live.ditto.zava.model.MulticastConfig
 import live.ditto.zava.model.BenchmarkRunner
 import live.ditto.zava.model.PreparedBenchmark
 import live.ditto.zava.model.QueryPreparation
@@ -247,6 +249,55 @@ object DittoManager {
 
     private suspend fun stopSyncNow(instance: Ditto) = withContext(Dispatchers.IO) {
         instance.sync.stop()
+    }
+
+    // MARK: - Multicast (beta) transport
+
+    /// App-level Wi-Fi multicast lock, held while the multicast transport is
+    /// enabled (pubsec-edgesync sidecar pattern: the SDK also holds its own
+    /// engine-level lock via DittoMulticastLock; this one covers the process
+    /// for the whole enabled period).
+    private var wifiMulticastLock: WifiManager.MulticastLock? = null
+
+    /// The multicast settings last applied to the live instance.
+    var multicastConfig = MulticastConfig()
+        private set
+
+    /// Applies multicast settings LIVE (the SDK documents transportConfig as
+    /// alterable at any time — no sync restart needed) and holds/releases the
+    /// app-level Wi-Fi multicast lock. Throws if Ditto isn't open.
+    fun setMulticastConfig(config: MulticastConfig) {
+        val instance = ditto ?: throw AppError("Ditto is not open yet")
+        instance.updateTransportConfig { transportConfig ->
+            transportConfig.peerToPeer.multicastBeta.enabled = config.enabled
+            transportConfig.peerToPeer.multicastBeta.groupAddress = config.groupAddress
+            transportConfig.peerToPeer.multicastBeta.port = config.port.toUShort()
+            transportConfig.peerToPeer.multicastBeta.interfaceName = config.interfaceName
+        }
+        multicastConfig = config
+        if (config.enabled) acquireMulticastLock() else releaseMulticastLock()
+        Log.i(
+            TAG,
+            if (config.enabled) {
+                "multicast beta ENABLED (${config.groupAddress}:${config.port}" +
+                    (config.interfaceName?.let { ", iface $it" } ?: "") + ")"
+            } else {
+                "multicast beta disabled"
+            },
+        )
+    }
+
+    private fun acquireMulticastLock() {
+        if (wifiMulticastLock == null) {
+            val wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            wifiMulticastLock = wifiManager?.createMulticastLock("zava-multicast")
+                ?.apply { setReferenceCounted(false) }
+        }
+        wifiMulticastLock?.let { if (!it.isHeld) it.acquire() }
+    }
+
+    private fun releaseMulticastLock() {
+        wifiMulticastLock?.let { if (it.isHeld) it.release() }
     }
 
     // MARK: - One-shot queries

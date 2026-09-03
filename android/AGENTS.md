@@ -50,6 +50,15 @@ shape (DQL strings verbatim, same copy, same states).
   mark as a VECTOR foreground (`res/drawable/ic_launcher_foreground.xml`,
   geometry from `assets/ditto_mark-dark.svg`, scaled to the 66/108 safe
   zone); brand parity with iOS/macOS (`swift/scripts/make_icon.swift`).
+- **Multicast (beta)**: Ditto tab → "Multicast (beta)" → MulticastScreen
+  toggles the reliable UDP multicast transport (`peerToPeer.multicastBeta`,
+  Android-only private beta). Pattern lifted from the pubsec-edgesync
+  sidecar: settings persist in SharedPreferences and re-apply after every
+  `DittoManager.open`; `updateTransportConfig` applies live (no sync
+  restart); an app-level `WifiManager.MulticastLock` is held while enabled
+  (SDK holds its own too). Validation: group must be IPv4 class-D, port
+  1..65535 (0 rejected — SDK reads it as "any port", breaking rendezvous).
+  Multicast connections show as `Multicast` in the tools Peers view.
 - **Brand assets**: `assets/` (repo root) holds the Ditto mark/logotype SVGs
   (dark + white). Android uses vector drawables tinted with the Anvil
   foreground token (`ditto_mark.xml` intrinsic size MUST stay 24dp — a

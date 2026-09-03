@@ -125,6 +125,12 @@ object DittoManager {
         try {
             registerSharedSubscriptions(instance)
             createSupportingIndexes(instance)
+            // Multicast must be configured BEFORE sync starts — the SDK
+            // defers multicast changes while sync is active on Android.
+            if (pendingMulticastConfig != MulticastConfig()) {
+                applyMulticastToInstance(instance, pendingMulticastConfig)
+                if (pendingMulticastConfig.enabled) acquireMulticastLock()
+            }
             startSyncNow(instance)
         } catch (e: Exception) {
             // Never pin a half-initialized instance.
@@ -259,15 +265,17 @@ object DittoManager {
     /// for the whole enabled period).
     private var wifiMulticastLock: WifiManager.MulticastLock? = null
 
+    /// The multicast settings to apply at the next [open] — set this BEFORE
+    /// open. Multicast config changes are DEFERRED while sync is active on
+    /// Android (SDK warning at runtime), so the only clean apply points are
+    /// pre-sync-start (here) or a stop→apply→start cycle (setMulticastConfig).
+    var pendingMulticastConfig = MulticastConfig()
+
     /// The multicast settings last applied to the live instance.
     var multicastConfig = MulticastConfig()
         private set
 
-    /// Applies multicast settings LIVE (the SDK documents transportConfig as
-    /// alterable at any time — no sync restart needed) and holds/releases the
-    /// app-level Wi-Fi multicast lock. Throws if Ditto isn't open.
-    fun setMulticastConfig(config: MulticastConfig) {
-        val instance = ditto ?: throw AppError("Ditto is not open yet")
+    private fun applyMulticastToInstance(instance: Ditto, config: MulticastConfig) {
         instance.updateTransportConfig { transportConfig ->
             transportConfig.peerToPeer.multicastBeta.enabled = config.enabled
             transportConfig.peerToPeer.multicastBeta.groupAddress = config.groupAddress
@@ -275,7 +283,6 @@ object DittoManager {
             transportConfig.peerToPeer.multicastBeta.interfaceName = config.interfaceName
         }
         multicastConfig = config
-        if (config.enabled) acquireMulticastLock() else releaseMulticastLock()
         Log.i(
             TAG,
             if (config.enabled) {
@@ -285,6 +292,30 @@ object DittoManager {
                 "multicast beta disabled"
             },
         )
+    }
+
+    /// Applies multicast settings to the live instance. On Android the SDK
+    /// defers multicast changes while sync is active, so this stops sync,
+    /// applies, and restarts it — a brief, deliberate sync pause. When Ditto
+    /// isn't open yet the config is staged for open() instead.
+    suspend fun setMulticastConfig(config: MulticastConfig) {
+        pendingMulticastConfig = config
+        val instance = ditto
+        if (instance == null) {
+            multicastConfig = config
+            return
+        }
+        if (instance.sync.isActive) {
+            stopSyncNow(instance)
+            try {
+                applyMulticastToInstance(instance, config)
+            } finally {
+                startSyncNow(instance)
+            }
+        } else {
+            applyMulticastToInstance(instance, config)
+        }
+        if (config.enabled) acquireMulticastLock() else releaseMulticastLock()
     }
 
     private fun acquireMulticastLock() {

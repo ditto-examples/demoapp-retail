@@ -73,6 +73,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
     )
 
     /// Persists + applies multicast settings to the live Ditto instance.
+    /// The SDK defers multicast changes while sync is active on Android, so
+    /// applying live costs a brief sync stop→apply→start (in DittoManager).
     /// Validation failures surface in the banner, never crash.
     fun setMulticastConfig(config: MulticastConfig) {
         prefs.edit()
@@ -82,10 +84,12 @@ class AppState(application: Application) : AndroidViewModel(application) {
             .putString(KEY_MULTICAST_INTERFACE, config.interfaceName)
             .apply()
         _multicastConfig.value = config
-        try {
-            DittoManager.setMulticastConfig(config)
-        } catch (e: Exception) {
-            _lastError.value = "Multicast config failed: ${e.localizedMessage}"
+        viewModelScope.launch {
+            try {
+                DittoManager.setMulticastConfig(config)
+            } catch (e: Exception) {
+                _lastError.value = "Multicast config failed: ${e.localizedMessage}"
+            }
         }
     }
 
@@ -118,21 +122,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
+                // Stage the persisted multicast (beta) config BEFORE open:
+                // the SDK defers multicast changes while sync is active, so
+                // open() applies it pre-sync-start (no stop/start churn).
+                DittoManager.pendingMulticastConfig = _multicastConfig.value
                 val instance = DittoManager.open(config) { message ->
                     viewModelScope.launch { _lastError.value = message }
                 }
                 _ditto.value = instance
                 Log.i(TAG, "Ditto open; sync started")
-                // Re-apply the persisted multicast (beta) setting to the fresh
-                // instance — transport config doesn't survive a new Ditto open.
-                if (_multicastConfig.value.enabled) {
-                    try {
-                        DittoManager.setMulticastConfig(_multicastConfig.value)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "multicast apply-at-open failed: ${e.localizedMessage}")
-                        _lastError.value = "Multicast config failed: ${e.localizedMessage}"
-                    }
-                }
                 storesObserver = DittoManager.observe<Store>("SELECT * FROM stores") { stores ->
                     Log.i(TAG, "stores observer fired: ${stores.size} stores")
                     _stores.value = stores.sortedBy { it.store_name }

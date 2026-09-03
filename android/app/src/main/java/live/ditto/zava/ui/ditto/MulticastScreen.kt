@@ -19,7 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ditto.kotlin.DittoConnectionType
 import live.ditto.zava.model.MulticastConfig
 import live.ditto.zava.state.AppState
 import live.ditto.zava.ui.components.DittoBadge
@@ -43,6 +44,17 @@ import live.ditto.anvil.material3.DittoColors
 fun MulticastScreen(appState: AppState, modifier: Modifier = Modifier) {
     val colors = DittoColors.current
     val config by appState.multicastConfig.collectAsStateWithLifecycle()
+    val ditto by appState.ditto.collectAsStateWithLifecycle()
+
+    // "Enabled" (the switch) and "connected" are different things: the live
+    // truth is the presence graph — multicast sessions appear as connections
+    // with connectionType == Multicast (same data the tools Peers view shows).
+    val multicastConnections by produceState(initialValue = 0, ditto) {
+        val instance = ditto ?: return@produceState
+        instance.presence.observe().collect { graph ->
+            value = graph.localPeer.connections.count { it.connectionType == DittoConnectionType.Multicast }
+        }
+    }
 
     Column(
         modifier = modifier
@@ -74,6 +86,10 @@ fun MulticastScreen(appState: AppState, modifier: Modifier = Modifier) {
                     DittoBadge(
                         "${config.groupAddress}:${config.port}" + (config.interfaceName?.let { " · $it" } ?: ""),
                         DittoBadgeStatus.Promo,
+                    )
+                    DittoBadge(
+                        "$multicastConnections connection${if (multicastConnections == 1) "" else "s"}",
+                        if (multicastConnections > 0) DittoBadgeStatus.Success else DittoBadgeStatus.Warning,
                     )
                 }
             }

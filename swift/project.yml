@@ -76,6 +76,10 @@ targets:
       - name: SwiftLint
         shell: /bin/sh
         script: |
+          # Xcode's GUI build environment doesn't inherit the shell PATH —
+          # a Homebrew swiftlint (/opt/homebrew/bin on Apple Silicon,
+          # /usr/local/bin on Intel) is invisible to `command -v` without this.
+          export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
           if command -v swiftlint >/dev/null; then
             cd "$SRCROOT" && swiftlint lint --config .swiftlint.yml
           else

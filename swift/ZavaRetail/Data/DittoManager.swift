@@ -106,8 +106,19 @@ actor DittoManager {
         instance.auth?.expirationHandler = { dittoInstance, _ in
             dittoInstance.auth?.login(token: token, provider: .development) { _, error in
                 if let error {
+                    // The banner text is the generic wrapper ("Failed to
+                    // authenticate with the remote server"); the underlying
+                    // server reason lives in the NSError chain — surface it in
+                    // the banner AND log the full userInfo for diagnosis.
+                    let nsError = error as NSError
+                    Logger.sync.error(
+                        "auth login failed: \(nsError.localizedDescription) userInfo=\(nsError.userInfo)"
+                    )
+                    let underlying = (nsError.userInfo[NSUnderlyingErrorKey] as? NSError)?.localizedDescription
+                    let message = "Ditto auth failed: \(error.localizedDescription)"
+                        + (underlying.map { " — \($0)" } ?? "")
                     Task { @MainActor in
-                        onError("Ditto auth failed: \(error.localizedDescription)")
+                        onError(message)
                     }
                 }
             }

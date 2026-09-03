@@ -1,0 +1,8 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include "Generated.xcconfig"
+// DittoCore ships arm64-only for the simulator (x86_64 was dropped in Ditto
+// SDK v5, SDKS-3740). Generated.xcconfig above excludes only i386, which
+// clobbers the Pods x86_64 exclusion — re-apply it AFTER the include so the
+// "generic/platform=iOS Simulator" build doesn't try to link an x86_64
+// Runner against a framework slice that doesn't exist.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64

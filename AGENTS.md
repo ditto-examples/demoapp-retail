@@ -36,6 +36,7 @@ answers.
 | Swift project regen | `cd swift && make setup` (buildEnv.sh + xcodegen) |
 | Swift build (iOS sim) | `cd swift && xcodebuild -project ZavaRetail.xcodeproj -scheme ZavaRetail -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` |
 | Swift tests | same + `-only-testing:ZavaRetailTests test` / `-only-testing:ZavaRetailUITests test` |
+| Flutter (fvm-pinned 3.47.0) | `cd flutter && fvm flutter analyze` / `fvm flutter test` / `fvm flutter run -d <device> --dart-define-from-file=../.env` |
 
 ## Dataset
 

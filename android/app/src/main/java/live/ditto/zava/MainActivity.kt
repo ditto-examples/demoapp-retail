@@ -63,6 +63,7 @@ import live.ditto.zava.ui.customers.CustomersScreen
 import live.ditto.zava.ui.dashboard.DashboardScreen
 import live.ditto.zava.ui.ditto.DittoTabScreen
 import live.ditto.zava.ui.ditto.IndexesScreen
+import live.ditto.zava.ui.ditto.MulticastScreen
 import live.ditto.zava.ui.ditto.SyncStatusScreen
 import live.ditto.zava.ui.ditto.ToolsScreen
 import live.ditto.zava.ui.components.QueryInfoButton
@@ -90,6 +91,7 @@ sealed interface Route : NavKey {
     @Serializable data object SyncStatus : Route
     @Serializable data object Indexes : Route
     @Serializable data object Tools : Route
+    @Serializable data object Multicast : Route
 }
 
 private val Route.title: String
@@ -106,6 +108,7 @@ private val Route.title: String
         Route.SyncStatus -> "Sync status"
         Route.Indexes -> "Indexes"
         Route.Tools -> "Ditto tools"
+        Route.Multicast -> "Multicast"
     }
 
 private data class Tab(
@@ -356,6 +359,7 @@ private fun MainTabs(appState: AppState) {
                             onOpenSyncStatus = { navigate(Route.SyncStatus) },
                             onOpenIndexes = { navigate(Route.Indexes) },
                             onOpenTools = { navigate(Route.Tools) },
+                            onOpenMulticast = { navigate(Route.Multicast) },
                         )
                     }
                     entry<Route.QueryRunner> { QueryCatalogScreen(onOpenBenchmark = { navigate(Route.BenchmarkDetail(it)) }) }
@@ -363,6 +367,7 @@ private fun MainTabs(appState: AppState) {
                     entry<Route.SyncStatus> { SyncStatusScreen() }
                     entry<Route.Indexes> { IndexesScreen() }
                     entry<Route.Tools> { ToolsScreen(appState) }
+                    entry<Route.Multicast> { MulticastScreen(appState) }
                 },
             )
         }

@@ -56,6 +56,7 @@ fun DittoTabScreen(
     onOpenSyncStatus: () -> Unit,
     onOpenIndexes: () -> Unit,
     onOpenTools: () -> Unit,
+    onOpenMulticast: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = DittoColors.current
@@ -88,6 +89,15 @@ fun DittoTabScreen(
                 DittoRow("Ditto tools", onOpenTools)
                 Text(
                     "The official Ditto tools viewer (ditto-tools-android).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.foregroundSubtle,
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                )
+            }
+            item {
+                DittoRow("Multicast (beta)", onOpenMulticast)
+                Text(
+                    "Enable the reliable UDP multicast transport (Android-only private beta) for LAN demos — device-to-device sync over Wi-Fi multicast.",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.foregroundSubtle,
                     modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),

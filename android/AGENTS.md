@@ -50,6 +50,24 @@ shape (DQL strings verbatim, same copy, same states).
   mark as a VECTOR foreground (`res/drawable/ic_launcher_foreground.xml`,
   geometry from `assets/ditto_mark-dark.svg`, scaled to the 66/108 safe
   zone); brand parity with iOS/macOS (`swift/scripts/make_icon.swift`).
+- **Multicast (beta)**: Ditto tab → "Multicast (beta)" → MulticastScreen
+  toggles the reliable UDP multicast transport (`peerToPeer.multicastBeta`,
+  Android-only private beta). Pattern lifted from the pubsec-edgesync
+  sidecar: settings persist in SharedPreferences; validation: group must be
+  IPv4 class-D, port 1..65535 (0 rejected — SDK reads it as "any port",
+  breaking rendezvous). Multicast connections show as `Multicast` in
+  presence (the MulticastScreen badges the live count) and the tools Peers
+  view.
+  **CRITICAL platform constraint (verified on-device, 5.1.0): multicast
+  config changes are DEFERRED while sync is active** — the SDK logs
+  "Reliable UDP multicast configuration changes are deferred while sync is
+  active on this platform; stop sync, set the transport configuration, and
+  start sync again to apply them". The generic transportConfig docs say
+  "alter at any time" but multicast on Android is the exception. So:
+  `pendingMulticastConfig` is staged BEFORE `DittoManager.open()` (applied
+  pre-`sync.start()`), and the UI toggle (`setMulticastConfig`) does a
+  deliberate stop→apply→start sync cycle. An app-level
+  `WifiManager.MulticastLock` is held while enabled.
 - **Brand assets**: `assets/` (repo root) holds the Ditto mark/logotype SVGs
   (dark + white). Android uses vector drawables tinted with the Anvil
   foreground token (`ditto_mark.xml` intrinsic size MUST stay 24dp — a

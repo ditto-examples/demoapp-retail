@@ -122,20 +122,28 @@ class DittoManager {
       // shared catalog (registered once)
       instance.sync.registerSubscription('SELECT * FROM stores'),
       instance.sync.registerSubscription('SELECT * FROM categories'),
+      instance.sync.registerSubscription('SELECT * FROM product_types'),
       instance.sync.registerSubscription('SELECT * FROM products'),
-      // subscription__customers_all — the whole directory (a walk-in could be anyone)
+      // the whole directory — a walk-in could be anyone
       instance.sync.registerSubscription('SELECT * FROM customers WHERE deleted = false'),
+      // The chain-wide item ledger. Normalized order_items docs carry NO
+      // store_id (store reachability is a JOIN through orders), and sync
+      // subscriptions reject JOINs — so items sync unfiltered. Per-store
+      // filtering happens in the screen queries.
+      instance.sync.registerSubscription('SELECT * FROM order_items WHERE deleted = false'),
     ]);
   }
 
   Future<void> _createSupportingIndexes(Ditto instance) async {
     // App-namespaced zava_* names so the Query Runner's benchmark
     // postQueries (DROP INDEX on benchmark-named indexes) can never drop
-    // the app's own indexes (PLAN §4.1).
+    // the app's own indexes (PLAN §4.1). JOIN inner legs hit ID scans (all
+    // app joins key on `_id`), so no join indexes are needed — only these
+    // per-store/order lookup paths.
     for (final statement in [
       'CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)',
       'CREATE INDEX IF NOT EXISTS zava_orders_store ON orders (store_id, deleted)',
-      'CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id, deleted)',
+      'CREATE INDEX IF NOT EXISTS zava_order_items_order ON order_items (order_id)',
     ]) {
       await instance.store.execute(statement);
     }
@@ -162,10 +170,13 @@ class DittoManager {
     _storeSubscriptions.clear();
 
     // Local-only removal of the old store's slice (EVICT vs DELETE is a
-    // teaching moment). Docs in flight can still land afterwards — hence the
-    // re-evict pass below.
+    // teaching moment). Only orders and inventory are per-store; order_items
+    // is a chain-wide subscription in the normalized schema (items have no
+    // store_id of their own — they reach a store through their parent order's
+    // store_id, via JOIN). Docs in flight can still land afterwards — hence
+    // the re-evict pass below.
     try {
-      for (final collection in ['order_items', 'orders', 'inventory']) {
+      for (final collection in ['orders', 'inventory']) {
         await instance.store.execute(
           'EVICT FROM $collection WHERE store_id != :storeId',
           arguments: {'storeId': storeId},
@@ -178,7 +189,6 @@ class DittoManager {
     }
     if (_selectionEpoch != epoch) return;
 
-    // The benchmark's subscription__* queries verbatim, parameterized.
     // Add as registered: a mid-sequence throw leaves the earlier subs
     // tracked (the next switch's cancel loop owns them), never leaked.
     _storeSubscriptions.add(
@@ -193,12 +203,6 @@ class DittoManager {
         arguments: {'storeId': storeId},
       ),
     );
-    _storeSubscriptions.add(
-      instance.sync.registerSubscription(
-        'SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false',
-        arguments: {'storeId': storeId},
-      ),
-    );
     _currentStoreId = storeId;
     _scheduleReEvict(storeId, epoch);
   }
@@ -210,7 +214,7 @@ class DittoManager {
     _reEvictTimer = Timer(const Duration(seconds: 3), () async {
       if (_selectionEpoch != epoch) return;
       developer.log('re-evict pass for $storeId', name: 'DittoManager');
-      for (final collection in ['order_items', 'orders', 'inventory']) {
+      for (final collection in ['orders', 'inventory']) {
         // Re-check the epoch after every suspension, same discipline as the
         // primary switch path.
         final instance = _ditto;

@@ -11,7 +11,7 @@ shape (DQL strings verbatim, same copy, same states).
 | Task | Command |
 |---|---|
 | Build | `./gradlew :app:assembleDebug` |
-| Unit tests | `./gradlew :app:testDebugUnitTest` (23 tests: paging, runner transforms/stats/orchestration, catalog, sanitizers) |
+| Unit tests | `./gradlew :app:testDebugUnitTest` (32 tests: paging, runner transforms/stats/orchestration, catalog, sanitizers) |
 | Install + run | `adb install -r app/build/outputs/apk/debug/app-debug.apk` then `am start -n live.ditto.zava/.MainActivity` |
 | UI-test store-reset hook | launch extra `-e resetStoreSelection true` clears the persisted store |
 

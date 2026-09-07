@@ -158,7 +158,7 @@ actor DittoManager {
         return dir
     }
 
-    // MARK: - Subscriptions (PLAN §4.1 — the four subscription__* queries verbatim)
+    // MARK: - Subscriptions (PLAN §4.1)
 
     private func registerSharedSubscriptions(on ditto: Ditto) throws {
         guard sharedSubscriptions.isEmpty else { return }
@@ -167,18 +167,29 @@ actor DittoManager {
         // the caller's teardown) rather than leaked as anonymous live subs.
         try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM stores"))
         try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM categories"))
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM product_types"))
         try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM products"))
-        // subscription__customers_all: the full customer directory — a
-        // walk-in could be anyone, so devices hold all of them.
+        // The full customer directory — a walk-in could be anyone, so devices
+        // hold all of them.
         try sharedSubscriptions.append(ditto.sync.registerSubscription(
             query: "SELECT * FROM customers WHERE deleted = false"
+        ))
+        // The chain-wide item ledger. Normalized order_items docs carry NO
+        // store_id (store reachability is a JOIN through orders), and sync
+        // subscriptions reject JOINs — so items sync unfiltered. Per-store
+        // filtering happens in the screen queries, which run after the store's
+        // orders land.
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(
+            query: "SELECT * FROM order_items WHERE deleted = false"
         ))
     }
 
     /// The benchmark README is explicit: composite-_id subfield queries need
     /// an explicit index (the auto-_id index does not help). App-namespaced
     /// (`zava_*`) so the Query Runner's benchmark postQueries (DROP INDEX on
-    /// benchmark names) can never drop the app's own indexes.
+    /// benchmark names) can never drop the app's own indexes. JOIN inner legs
+    /// hit ID scans (all app joins key on `_id`), so no join indexes are
+    /// needed — only these per-store/order lookup paths.
     private func createSupportingIndexes(on ditto: Ditto) async throws {
         try await ditto.store.execute(
             query: "CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)"
@@ -187,7 +198,7 @@ actor DittoManager {
             query: "CREATE INDEX IF NOT EXISTS zava_orders_store ON orders (store_id, deleted)"
         ).dematerializeItems()
         try await ditto.store.execute(
-            query: "CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id, deleted)"
+            query: "CREATE INDEX IF NOT EXISTS zava_order_items_order ON order_items (order_id)"
         ).dematerializeItems()
     }
 
@@ -225,11 +236,12 @@ actor DittoManager {
         }
         storeSubscriptions = []
 
-        // Evict data from any previous store. All three per-store collections
-        // carry a top-level store_id (inventory has both that and the
-        // composite _id), so one simple predicate works everywhere.
+        // Evict data from any previous store. Only orders and inventory are
+        // per-store; order_items is a chain-wide subscription in the
+        // normalized schema (items have no store_id of their own — they reach
+        // a store through their parent order's store_id, via JOIN).
         do {
-            for collection in ["order_items", "orders", "inventory"] {
+            for collection in ["orders", "inventory"] {
                 try await ditto.store.execute(
                     query: "EVICT FROM \(collection) WHERE store_id != :storeId",
                     arguments: ["storeId": storeId]
@@ -252,10 +264,6 @@ actor DittoManager {
             query: "SELECT * FROM orders WHERE store_id = :storeId AND deleted = false",
             arguments: ["storeId": storeId]
         ))
-        try storeSubscriptions.append(ditto.sync.registerSubscription(
-            query: "SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false",
-            arguments: ["storeId": storeId]
-        ))
         currentStoreId = storeId
         scheduleReEvict(storeId: storeId, epoch: epoch)
     }
@@ -276,7 +284,7 @@ actor DittoManager {
     private func reEvictIfCurrent(storeId: String, epoch: Int) async {
         guard selectionEpoch == epoch, ditto != nil else { return }
         Self.log.info("re-evict pass for \(storeId, privacy: .public)")
-        for collection in ["order_items", "orders", "inventory"] {
+        for collection in ["orders", "inventory"] {
             // Re-check the epoch after every suspension, same discipline as
             // the primary switch path: a newer selection must not watch the
             // old pass evict ITS freshly-syncing rows.

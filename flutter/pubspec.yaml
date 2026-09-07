@@ -67,8 +67,8 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # The 72-query benchmark catalog for the Query Runner tab (symlink to the
-  # shared catalog) + the Ditto brand SVGs.
+  # The 96-query retail-JOINs benchmark catalog for the Query Runner tab
+  # (symlink to the shared catalog) + the Ditto brand SVGs.
   assets:
     - assets/benchmarks.json
     - assets/ditto_mark-dark.svg

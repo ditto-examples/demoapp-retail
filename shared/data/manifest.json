@@ -1,0 +1,69 @@
+{
+  "source": "microsoft/ai-tour-26-zava-diy-dataset-plus-mcp zava_retail_2025_07_21 backup",
+  "collections": {
+    "stores": {
+      "docs": 8,
+      "sha256_gz": "68fdc4124312f176ed7d7b35b10becf4a2b5e669ac9e65ab3c9685d7a3a8beba",
+      "file": "stores.ndjson.gz"
+    },
+    "categories": {
+      "docs": 9,
+      "sha256_gz": "5f0da7eea3f6ef06f059dd9b88b3c10dbb323e0db6adf20bd94c7c394986c69e",
+      "file": "categories.ndjson.gz"
+    },
+    "product_types": {
+      "docs": 89,
+      "sha256_gz": "ded4bf11f0a0d9bc6e070ec23e0253056093e4dbec8303454fbce657e2387c57",
+      "file": "product_types.ndjson.gz"
+    },
+    "products": {
+      "docs": 424,
+      "sha256_gz": "e5d29ca7a0497a41a8ce349ecf95f32c33c50fc268cc03e6247508e7d56b7c43",
+      "file": "products.ndjson.gz"
+    },
+    "customers": {
+      "docs": 50000,
+      "sha256_gz": "784b3e568d4178316b02860fd0ee76958d808f55fda93bed3a8d556233e711d3",
+      "file": "customers.ndjson.gz"
+    },
+    "inventory": {
+      "docs": 3392,
+      "sha256_gz": "16fe6840715a32e5ff6f39eccc054e16525c1e0e6f4db08f00c4114ca5a4efdd",
+      "file": "inventory.ndjson.gz"
+    },
+    "orders": {
+      "docs": 197665,
+      "sha256_gz": "340da8b6ed300e91ef64893a9879f4a945fb037e78059bd437f75c9d3c5b5340",
+      "file": "orders.ndjson.gz"
+    },
+    "order_items": {
+      "docs": 414241,
+      "sha256_gz": "98757ff489983df1c52aca68a34fab65c27346e7d34f13f4345f274aae186fb9",
+      "file": "order_items.ndjson.gz"
+    }
+  },
+  "orders_per_store": {
+    "store_kirkland": 2975,
+    "store_redmond": 5047,
+    "store_everett": 6492,
+    "store_spokane": 9831,
+    "store_tacoma": 26064,
+    "store_bellevue": 36666,
+    "store_seattle": 54995,
+    "store_online": 55595
+  },
+  "default_store": "store_kirkland",
+  "catalog_anchors": {
+    "order": "order_197663",
+    "customer": "customer_40000",
+    "join_customer": "customer_23",
+    "sku": "HTHM001600"
+  },
+  "synthesized_fields": {
+    "orders.status": "deterministic 60/26/10/4 spread (MS data has none)",
+    "orders.total": "round(subtotal * 1.095, 2) \u2014 derived tax",
+    "orders.subtotal/item_count": "aggregated from real line items",
+    "stores.location": "real WA city/state/zip per named store (MS has no column)",
+    "inventory.location/last_counted": "deterministic fabrication (MS has no columns)"
+  }
+}

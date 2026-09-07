@@ -1,15 +1,20 @@
 import Foundation
 
-/// One entry from shared/benchmarks.json (the 72-query DQL benchmark catalog,
-/// bundled as an app resource and browsable/runnable in the Query Runner tab).
+/// One entry from shared/benchmarks.json (the 96-query retail-JOINs DQL
+/// benchmark catalog, bundled as an app resource and browsable/runnable in
+/// the Query Runner tab).
 struct BenchmarkEntry: Sendable, Decodable {
     let query: String
     let category: String
     let preQueries: [String]?
     let postQueries: [String]?
+    /// The harness's oracle count for this query on the full dataset —
+    /// displayed next to the device's result count in the runner (sliced
+    /// datasets legitimately differ; the runner copy says so).
+    let expected_count: Int?
 
     var isMutating: Bool {
-        ["INSERT", "UPDATE", "DELETE", "EVICT"].contains(category)
+        ["INSERT", "UPDATE", "DELETE", "EVICT", "UPSERT"].contains(category)
     }
 }
 
@@ -150,18 +155,18 @@ enum QueryPreparation {
 
     /// For EVICT entries: the propagating cleanup DELETE appended after the
     /// run (EVICT is local-only; without this the synthetic doc stays on Big
-    /// Peer and re-syncs everywhere). Handles both scalar and composite
-    /// (object-literal) `_id` targets. Nil for non-EVICT entries or when the
-    /// target can't be extracted — the caller surfaces that loudly.
+    /// Peer and re-syncs everywhere). Reuses the EVICT's whole WHERE clause —
+    /// scalar/composite `_id` targets and bulk `order_id = 'bench-…-bulk-…'`
+    /// predicates alike. Nil for non-EVICT entries or when the statement
+    /// shape can't be parsed — the caller surfaces that loudly.
     static func evictCleanup(
         entry: BenchmarkEntry,
         transform: (String) -> String
     ) -> String? {
         guard entry.category == "EVICT" else { return nil }
-        // Scalar `_id = '...'` or composite `_id = {'k': 'v', ...}`.
-        guard let idRange = entry.query.range(
-            of: #"_id\s*=\s*(\{[^}]+\}|'[^']+')"#,
-            options: .regularExpression
+        guard let whereRange = entry.query.range(
+            of: #"\bWHERE\b"#,
+            options: [.regularExpression, .caseInsensitive]
         ) else { return nil }
         guard let collectionRange = entry.query.range(
             of: #"EVICT\s+FROM\s+\w+"#,
@@ -172,7 +177,10 @@ enum QueryPreparation {
             .trimmingCharacters(in: .whitespaces)
         guard !collection.isEmpty else { return nil }
         // transform() applies the per-run bench-id suffix.
-        let predicate = transform(String(entry.query[idRange]))
+        let predicate = transform(
+            String(entry.query[whereRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        )
+        guard !predicate.isEmpty else { return nil }
         return "DELETE FROM \(collection) WHERE \(predicate)"
     }
 }

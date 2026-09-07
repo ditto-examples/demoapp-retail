@@ -2,13 +2,20 @@ import XCTest
 
 /// Query Runner smoke test: browse the bundled benchmark catalog, run a
 /// benchmark against the synced store, see a result count + timings.
+///
+/// Runs `customers__select__by_id` (anchor: `customer_40000` — a real
+/// Microsoft row). Customers reach the device via the SHARED (unfiltered)
+/// subscription, so the anchor is present quickly regardless of which store
+/// is selected — unlike the per-store `orders__select__by_id` anchor
+/// (`order_197663` is a Seattle order; a Kirkland-first device ecountering
+/// 55K Seattle orders mid-sync was the flake source).
 final class QueryRunnerUITests: XCTestCase {
     @MainActor
     func testRunBenchmarkFromCatalog() {
         let app = XCUIApplication()
-        // Preselect Seattle via the NSUserDefaults argument domain (skips the
-        // picker; boot applies the selection and registers per-store subs).
-        app.launchArguments = ["-selectedStoreId", "store_seattle"]
+        // Preselect the loader-default (Kirkland — lightest sync) via the
+        // NSUserDefaults argument domain (skips the picker).
+        app.launchArguments = ["-selectedStoreId", "store_kirkland"]
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Dashboard"].waitForExistence(timeout: 60))
@@ -18,9 +25,9 @@ final class QueryRunnerUITests: XCTestCase {
         XCTAssertTrue(runnerRow.waitForExistence(timeout: 30))
         runnerRow.tap()
 
-        // Catalog browser: find the anchor-order point lookup (fast, 1 row).
-        // It's in the "orders" section, off-screen — scroll until it renders.
-        let entry = app.staticTexts["orders__select__by_id"]
+        // Catalog browser: find the anchor point lookup (fast, 1 row).
+        // It's in the "customers" section, off-screen — scroll until it renders.
+        let entry = app.staticTexts["customers__select__by_id"]
         var scrolled = 0
         while !entry.exists && scrolled < 12 {
             app.swipeUp()
@@ -28,7 +35,7 @@ final class QueryRunnerUITests: XCTestCase {
         }
         XCTAssertTrue(
             entry.waitForExistence(timeout: 10),
-            "orders__select__by_id should appear after scrolling the catalog"
+            "customers__select__by_id should appear after scrolling the catalog"
         )
         entry.tap()
 
@@ -52,7 +59,7 @@ final class QueryRunnerUITests: XCTestCase {
         )
         XCTAssertEqual(
             resultCount.label, "1 rows",
-            "orders__select__by_id hits exactly the anchor order (got: \(resultCount.label))"
+            "customers__select__by_id hits exactly the anchor customer (got: \(resultCount.label))"
         )
 
         let mean = app.staticTexts["Mean"]

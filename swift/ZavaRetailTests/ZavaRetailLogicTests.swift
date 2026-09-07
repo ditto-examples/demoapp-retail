@@ -30,47 +30,108 @@ final class ZavaRetailLogicTests: XCTestCase {
 
     func testStoreDecodes() throws {
         let store = try sample("store", as: Store.self)
-        XCTAssertEqual(store.store_name, "Zava Retail Seattle")
-        XCTAssertEqual(store.location.city, "Seattle")
+        XCTAssertEqual(store.store_name, "Zava Retail Kirkland")
+        XCTAssertEqual(store.location.city, "Kirkland")
         XCTAssertFalse(store.is_online)
+        XCTAssertEqual(
+            store.demo_default,
+            true,
+            "the loader flags the smallest-order store for the no-picker default"
+        )
     }
 
     func testCategoryDecodesWithSeasonalMap() throws {
         let category = try sample("category", as: Category.self)
-        XCTAssertEqual(category.category_name, "Hand Tools")
+        XCTAssertEqual(category.category_name, "HAND TOOLS") // Microsoft ships uppercase names
         XCTAssertNotNil(category.seasonal_multipliers?["mar"])
+    }
+
+    func testProductTypeDecodes() throws {
+        let type = try sample("product_type", as: ProductType.self)
+        XCTAssertEqual(type.type_name, "HAMMERS")
+        XCTAssertEqual(type.category_id, "cat_hand_tools")
     }
 
     func testProductDecodes() throws {
         let product = try sample("product", as: Product.self)
-        XCTAssertEqual(product.sku, "HND-0001")
-        XCTAssertEqual(product.base_price, 54.75, accuracy: 0.001)
+        XCTAssertEqual(product.sku, "HTHM001600")
+        XCTAssertEqual(
+            product.product_name,
+            "Professional Claw Hammer 16oz",
+            "products carry Microsoft's real catalog names"
+        )
+        XCTAssertEqual(product.type_id, "ptype_hammers_1")
+        XCTAssertEqual(product.base_price, 41.79, accuracy: 0.001)
     }
 
     func testCustomerDecodes() throws {
         let customer = try sample("customer", as: Customer.self)
-        XCTAssertEqual(customer.displayName, "Danielle Johnson")
-        XCTAssertEqual(customer.primary_store_id, "store_redmond")
+        XCTAssertEqual(customer.displayName, "Jasmine Johnston")
+        XCTAssertEqual(customer.primary_store_id, "store_online")
     }
 
     func testInventoryDecodesCompositeId() throws {
         let item = try sample("inventory", as: InventoryItem.self)
         XCTAssertEqual(item._id.store_id, "store_seattle")
-        XCTAssertEqual(item._id.product_id, "prod_hnd_0001")
-        XCTAssertEqual(item.location.aisle, "4")
-        XCTAssertEqual(item.id, "store_seattle|prod_hnd_0001")
+        XCTAssertEqual(item._id.product_id, "prod_1")
+        XCTAssertEqual(item.location.aisle, "6")
+        XCTAssertEqual(item.id, "store_seattle|prod_1")
     }
 
-    func testOrderDecodes() throws {
+    func testOrderDecodesNormalized() throws {
         let order = try sample("order", as: Order.self)
         XCTAssertEqual(order.status, "completed")
-        XCTAssertEqual(order.total, 250.88, accuracy: 0.001)
+        XCTAssertEqual(order.item_count, 5)
+        XCTAssertEqual(order.subtotal, 1564.77, accuracy: 0.001)
+        XCTAssertEqual(order.total, 1713.42, accuracy: 0.001)
+        // The normalized fixture has no denormalized display fields; if one
+        // ever comes back, the model must not silently depend on it.
+        let raw = try XCTUnwrap(rawSample("order") as? [String: Any])
+        for field in ["customer_name", "customer_email", "store_name"] {
+            XCTAssertNil(raw[field], "order docs must stay normalized (no \(field))")
+        }
     }
 
-    func testOrderItemDecodes() throws {
+    func testOrderItemDecodesNormalized() throws {
         let item = try sample("order_item", as: OrderItem.self)
-        XCTAssertEqual(item.quantity, 3)
-        XCTAssertEqual(item.line_total, 167.61, accuracy: 0.001)
+        XCTAssertEqual(item.quantity, 2)
+        XCTAssertEqual(item.line_total, 775.98, accuracy: 0.001)
+        let raw = try XCTUnwrap(rawSample("order_item") as? [String: Any])
+        for field in ["store_id", "sku", "product_name"] {
+            XCTAssertNil(raw[field], "order_item docs must stay normalized (no \(field))")
+        }
+    }
+
+    func testJoinedRowShapesDecode() throws {
+        // The orders list row (orders ⨝ customers) and line-item row
+        // (order_items ⨝ products) must decode from flat DQL projections.
+        let summaryJSON = """
+        {"order_id":"order_197663",
+         "store_id":"store_seattle","order_date":"2024-12-30T00:00:00Z",
+         "status":"completed","subtotal":1564.77,"total":1713.42,"item_count":5,
+         "customer_id":"customer_50000",
+         "first_name":"Elizabeth","last_name":"Monroe"}
+        """
+        let summary = try JSONDecoder().decode(OrderSummaryRow.self, from: Data(summaryJSON.utf8))
+        XCTAssertEqual(summary.customerName, "Elizabeth Monroe")
+        XCTAssertEqual(summary._id, "order_197663", "_id derives from order_id (join-observer safe)")
+        let lineJSON = """
+        {"_id":"item_414233","order_id":"order_197663",
+         "product_id":"prod_64","quantity":2,"unit_price":387.99,
+         "discount_percent":0,"line_total":775.98,
+         "product_name":"Track Saw Kit 55-inch Rail","sku":"PTTS055000"}
+        """
+        let line = try JSONDecoder().decode(OrderLineRow.self, from: Data(lineJSON.utf8))
+        XCTAssertEqual(line.product_name, "Track Saw Kit 55-inch Rail")
+    }
+
+    /// Raw fixture access for the normalized-shape assertions above.
+    private func rawSample(_ key: String) throws -> Any {
+        let url = Bundle(for: ZavaRetailLogicTests.self)
+            .url(forResource: "retail_samples", withExtension: "json")
+        let data = try Data(contentsOf: XCTUnwrap(url))
+        let root = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        return try XCTUnwrap(root[key])
     }
 
     // MARK: - System collection row parsing
@@ -126,6 +187,23 @@ final class ZavaRetailLogicTests: XCTestCase {
         let url = try DittoManager.persistenceDirectory()
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         XCTAssertTrue(url.path.hasSuffix("zava/ditto"))
+    }
+
+    func testBenchmarkEntryDecodesJoinsCatalogFields() throws {
+        // retail-joins entries carry expected_count / sql_equivalent extras;
+        // the decoder must tolerate and expose the expected count.
+        let json = """
+        {"query":"SELECT 1","category":"JOIN_INNER","sql_equivalent":"SELECT 1",
+         "expected_count":42,"expected_first_rows_hash":"sha256:abc"}
+        """
+        let entry = try JSONDecoder().decode(BenchmarkEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.expected_count, 42)
+        XCTAssertFalse(entry.isMutating)
+        let upsert = BenchmarkEntry(
+            query: "INSERT INTO orders DOCUMENTS(deserialize_json('{\"_id\":\"bench-order-ups\"}')) ON ID CONFLICT DO UPDATE",
+            category: "UPSERT", preQueries: nil, postQueries: nil, expected_count: 1
+        )
+        XCTAssertTrue(upsert.isMutating, "UPSERT writes bench docs — it needs the confirm gate + id suffixing")
     }
 
     // MARK: - Benchmark orchestration seam (order, counting, cleanup-on-failure)
@@ -225,7 +303,7 @@ final class ZavaRetailLogicTests: XCTestCase {
     func testInvalidStoreIdSkipsSubstitution() {
         let e = BenchmarkEntry(
             query: "SELECT * FROM orders WHERE store_id = 'store_seattle'",
-            category: "SELECT", preQueries: nil, postQueries: nil
+            category: "SELECT", preQueries: nil, postQueries: nil, expected_count: nil
         )
         let prepared = QueryPreparation.prepare(name: "t", entry: e, storeId: "store'; --", runId: "r1")
         XCTAssertTrue(
@@ -240,18 +318,16 @@ final class ZavaRetailLogicTests: XCTestCase {
     func testEvictCleanupScalarId() {
         let e = BenchmarkEntry(
             query: "EVICT FROM customers WHERE _id = 'bench-cust-evict-uuid'",
-            category: "EVICT", preQueries: nil, postQueries: nil
+            category: "EVICT", preQueries: nil, postQueries: nil, expected_count: nil
         )
         let cleanup = QueryPreparation.evictCleanup(entry: e) { $0.replacingOccurrences(of: "bench-", with: "bench-r1-") }
         XCTAssertEqual(cleanup, "DELETE FROM customers WHERE _id = 'bench-r1-cust-evict-uuid'")
     }
 
     func testEvictCleanupCompositeId() {
-        // Latent case: today's catalog has no composite-id EVICT, but if one
-        // is added the cleanup must still derive (or fail loudly, not silently).
         let e = BenchmarkEntry(
             query: "EVICT FROM inventory WHERE _id = {'store_id': 'store_seattle', 'product_id': 'bench-prod'}",
-            category: "EVICT", preQueries: nil, postQueries: nil
+            category: "EVICT", preQueries: nil, postQueries: nil, expected_count: nil
         )
         let cleanup = QueryPreparation.evictCleanup(entry: e) { $0.replacingOccurrences(of: "bench-", with: "bench-r2-") }
         XCTAssertEqual(
@@ -260,8 +336,19 @@ final class ZavaRetailLogicTests: XCTestCase {
         )
     }
 
+    func testEvictCleanupBulkOrderId() {
+        // The joins catalog's bulk EVICT predicates on order_id, not _id
+        // (order_items__evict__bulk_by_order) — cleanup must still derive.
+        let e = BenchmarkEntry(
+            query: "EVICT FROM order_items WHERE order_id = 'bench-bulk-evict'",
+            category: "EVICT", preQueries: nil, postQueries: nil, expected_count: nil
+        )
+        let cleanup = QueryPreparation.evictCleanup(entry: e) { $0.replacingOccurrences(of: "bench-", with: "bench-r9-") }
+        XCTAssertEqual(cleanup, "DELETE FROM order_items WHERE order_id = 'bench-r9-bulk-evict'")
+    }
+
     func testEvictCleanupIgnoresNonEvict() {
-        let e = BenchmarkEntry(query: "SELECT 1", category: "SELECT", preQueries: nil, postQueries: nil)
+        let e = BenchmarkEntry(query: "SELECT 1", category: "SELECT", preQueries: nil, postQueries: nil, expected_count: nil)
         XCTAssertNil(QueryPreparation.evictCleanup(entry: e) { $0 })
     }
 
@@ -291,13 +378,17 @@ final class ZavaRetailLogicTests: XCTestCase {
 
     func testOrdersSearchQueryUsesLikeOnOrderNumberAndCustomer() {
         // Partial order number OR customer name — both via case-insensitive
-        // ILIKE with a contains-pattern arg.
+        // ILIKE with a contains-pattern arg. The customer name lives on the
+        // joined customers collection in the normalized schema.
         let q = OrdersState.searchQuery
-        XCTAssertTrue(q.contains("order_id ILIKE :like"))
-        XCTAssertTrue(q.contains("customer_name ILIKE :like"))
-        XCTAssertTrue(q.contains("store_id = :storeId"))
-        XCTAssertTrue(q.contains("ORDER BY order_date DESC, _id DESC"))
+        XCTAssertTrue(q.contains("INNER JOIN customers AS c ON o.customer_id = c._id"))
+        XCTAssertTrue(q.contains("o.order_id ILIKE :like"))
+        XCTAssertTrue(q.contains("c.first_name ILIKE :like"))
+        XCTAssertTrue(q.contains("c.last_name ILIKE :like"))
+        XCTAssertTrue(q.contains("o.store_id = :storeId"))
+        XCTAssertTrue(q.contains("ORDER BY o.order_date DESC, o._id DESC"))
         XCTAssertTrue(q.contains("LIMIT 50"))
+        XCTAssertFalse(q.contains("customer_name"), "no denormalized fields in the join shape")
     }
 
     func testOrdersSearchTermSanitization() {
@@ -326,12 +417,12 @@ final class ZavaRetailLogicTests: XCTestCase {
         let state = ProductsState()
         let paged = Product(
             _id: "p1", product_id: "p1", sku: "A-1", product_name: "Hammer",
-            category_id: "cat", cost: 1, base_price: 2, gross_margin_percent: 50,
+            category_id: "cat", type_id: nil, cost: 1, base_price: 2, gross_margin_percent: 50,
             deleted: false
         )
         let found = Product(
             _id: "p2", product_id: "p2", sku: "A-2", product_name: "Nail",
-            category_id: "cat", cost: 1, base_price: 2, gross_margin_percent: 50,
+            category_id: "cat", type_id: nil, cost: 1, base_price: 2, gross_margin_percent: 50,
             deleted: false
         )
         state.rows = [.init(product: paged, stock: nil)]

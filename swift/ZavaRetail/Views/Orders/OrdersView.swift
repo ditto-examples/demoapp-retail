@@ -3,16 +3,19 @@ import DittoSwift
 import OSLog
 import SwiftUI
 
-/// The orders list is a live, PAGED store observer (PLAN §4.2.2): the page
-/// slice is `ORDER BY order_date DESC LIMIT pageSize OFFSET (page-1)*pageSize`
-/// and the total comes from a COUNT observer — both live-update as sync runs.
+/// The orders list is a live, PAGED store observer over an INNER JOIN
+/// (orders ⨝ customers — PLAN §4.2.2): the page slice is
+/// `ORDER BY o.order_date DESC LIMIT pageSize OFFSET (page-1)*pageSize` and
+/// the total comes from a COUNT observer over the same join — both
+/// live-update as sync runs. The join replaces v5.0's denormalized
+/// `orders.customer_name`; the normalized dataset carries customer ids only.
 /// The "recent" filter anchors to max(order_date) in the local store — the
 /// dataset ends 2025-06-27, so a device-clock-relative filter would show
 /// zero rows.
 @MainActor
 @Observable
 final class OrdersState {
-    var orders: [Order] = []
+    var orders: [OrderSummaryRow] = []
     var totalCount = 0
     var page = 1
     var pageSize = 25
@@ -26,22 +29,37 @@ final class OrdersState {
     /// case-insensitive ILIKE queries with 500 ms debounce; the paged observer
     /// drives the list otherwise.
     var searchText = ""
-    var searchResults: [Order]?
+    var searchResults: [OrderSummaryRow]?
     var isSearching: Bool {
         searchResults != nil
     }
 
-    var visibleOrders: [Order] {
+    var visibleOrders: [OrderSummaryRow] {
         searchResults ?? orders
     }
 
-    /// DQL ILIKE (LIKE's case-insensitive variant) on both order number and
-    /// customer name. nonisolated: read by tests off the main actor.
+    /// DQL ILIKE (LIKE's case-insensitive variant) on order number and both
+    /// customer name fields — the name lives on `customers`, reached through
+    /// the join. nonisolated: read by tests off the main actor.
     nonisolated static let searchQuery = """
-    SELECT * FROM orders WHERE store_id = :storeId AND deleted = false \
-    AND (order_id ILIKE :like OR customer_name ILIKE :like) \
-    ORDER BY order_date DESC, _id DESC LIMIT 50
+    SELECT \(selectList) \(joinedFrom) \
+    AND (o.order_id ILIKE :like OR c.first_name ILIKE :like OR c.last_name ILIKE :like) \
+    ORDER BY o.order_date DESC, o._id DESC LIMIT 50
     """
+
+    /// Projection shared by the paged observer and search — one row per order
+    /// with the joined customer display name. Does NOT project `o._id`
+    /// (observer-shaped JOIN emissions namespace `_id` per alias; the row
+    /// derives it from `order_id`).
+    nonisolated static let selectList =
+        "o.order_id, o.store_id, o.order_date, o.status, o.subtotal, " +
+        "o.total, o.item_count, o.customer_id, c.first_name, c.last_name"
+
+    /// The joined FROM up to and including the store/deleted predicates; the
+    /// "Recent only" cutoff is appended when active.
+    nonisolated static let joinedFrom =
+        "FROM orders AS o INNER JOIN customers AS c ON o.customer_id = c._id " +
+        "WHERE o.store_id = :storeId AND o.deleted = false"
 
     /// Search input cleanup: trim whitespace and drop leading '#' characters —
     /// the list renders order numbers as "#20250115_0001" but the stored id is
@@ -74,7 +92,7 @@ final class OrdersState {
                 let results = try await DittoManager.shared.fetch(
                     Self.searchQuery,
                     arguments: ["storeId": storeId, "like": "%\(term)%"],
-                    as: Order.self
+                    as: OrderSummaryRow.self
                 )
                 guard !Task.isCancelled else { return }
                 self?.searchResults = results
@@ -109,7 +127,7 @@ final class OrdersState {
         let max_date: String?
     }
 
-    static let baseWhere = "FROM orders WHERE store_id = :storeId AND deleted = false"
+    static let baseFrom = joinedFrom
 
     /// Non-blocking restart entry point for view events (serializes).
     func restart(appState: AppState) {
@@ -152,7 +170,7 @@ final class OrdersState {
                 }
             }
             pageObserver = try await DittoManager.shared.observe(
-                built.pageQuery, arguments: built.arguments, as: Order.self
+                built.pageQuery, arguments: built.arguments, as: OrderSummaryRow.self
             ) { [weak self] orders in
                 self?.orders = orders
             }
@@ -174,25 +192,25 @@ final class OrdersState {
     }
 
     private func buildQueries(storeId: String) async -> BuiltQueries {
-        var whereClause = Self.baseWhere
+        var fromClause = Self.baseFrom
         var arguments: [String: Sendable] = ["storeId": storeId]
         if recentOnly,
            let maxDate = await latestOrderDate(storeId: storeId),
            let cutoff = Self.cutoffDate(from: maxDate, days: 30)
         {
-            whereClause += " AND order_date > :cutoff"
+            fromClause += " AND o.order_date > :cutoff"
             arguments["cutoff"] = cutoff
         }
 
         // Unique tiebreaker: OFFSET paging over a non-unique key can skip or
         // repeat rows across pages.
         let pageQuery = Paging.pageQuery(
-            base: "SELECT * \(whereClause)",
-            orderBy: "order_date DESC, _id DESC",
+            base: "SELECT \(Self.selectList) \(fromClause)",
+            orderBy: "o.order_date DESC, o._id DESC",
             page: page,
             pageSize: pageSize
         )
-        let countQuery = "SELECT COUNT(*) AS count \(whereClause)"
+        let countQuery = "SELECT COUNT(*) AS count \(fromClause)"
         var displayQuery = pageQuery
         for (key, value) in arguments {
             displayQuery = displayQuery.replacingOccurrences(of: ":\(key)", with: "'\(value)'")
@@ -247,9 +265,10 @@ struct OrdersView: View {
     Filters to orders from the last 30 days OF THE DATASET — the benchmark's \
     data ends 2025-06-27, so the cutoff is anchored to the newest synced order \
     (max(order_date) − 30 days), not to today's date. A naive "now minus 30 \
-    days" filter would show zero rows in a demo. This is the benchmark's \
-    date-range query shape (orders__select__by_date_range) with a parameterized \
-    cutoff — the info sheet above shows the exact query running, cutoff included.
+    days" filter would show zero rows in a demo. The list itself is a live \
+    INNER JOIN to customers (the normalized schema carries customer ids only — \
+    the name comes from the join). The info sheet above shows the exact query \
+    running, cutoff included.
     """
 
     /// What the info sheet shows WHILE searching — the list is then driven by
@@ -257,10 +276,12 @@ struct OrdersView: View {
     static let searchExplanation = """
     While you type, the list is driven by this one-shot query (500 ms debounce) \
     instead of the live paged observer. ILIKE is LIKE's case-insensitive \
-    variant, so partial order numbers and customer names match regardless of \
-    case. '%' and '_' in your input act as wildcards, and matches are capped \
-    at 50 rows. Search matches across all dates — it ignores the "Recent only" \
-    filter. Clear the field (the × button) to return to the live, paginated list.
+    variant, so partial order numbers and customer first/last names match \
+    regardless of case — the customer name is matched through the INNER JOIN \
+    to the customers collection. '%' and '_' in your input act as wildcards, \
+    and matches are capped at 50 rows. Search matches across all dates — it \
+    ignores the "Recent only" filter. Clear the field (the × button) to return \
+    to the live, paginated list.
     """
 
     @Environment(AppState.self) private var appState
@@ -278,7 +299,7 @@ struct OrdersView: View {
                 .replacingOccurrences(of: ":like", with: "'%\(term)%'")
         }
         return state.activeQuery.isEmpty
-            ? "SELECT * \(OrdersState.baseWhere) ORDER BY order_date DESC"
+            ? "SELECT \(OrdersState.selectList) \(OrdersState.baseFrom) ORDER BY o.order_date DESC"
             : state.activeQuery
     }
 
@@ -389,7 +410,7 @@ struct OrdersView: View {
 }
 
 private struct OrderRow: View {
-    let order: Order
+    let order: OrderSummaryRow
     @Environment(\.dittoColors) private var colors
 
     var body: some View {
@@ -398,7 +419,7 @@ private struct OrderRow: View {
                 Text(order.order_id.replacingOccurrences(of: "order_", with: "#"))
                     .font(.dittoCode(size: 13))
                     .foregroundStyle(colors.foregroundNormal)
-                Text("\(order.customer_name) · \(Formatters.dateTime(order.order_date))")
+                Text("\(order.customerName) · \(Formatters.dateTime(order.order_date))")
                     .font(.subheadline)
                     .foregroundStyle(colors.foregroundSubtle)
             }
@@ -416,16 +437,30 @@ private struct OrderRow: View {
     }
 }
 
-/// Order detail = order + its items via the canonical two-query pattern.
-/// DQL v5.0 has no JOINs: the first query fetched the order (the list's
-/// observer), this view runs the second (items by order_id).
+/// Order detail = the order row (already joined to its customer by the list)
+/// plus its line items through a second INNER JOIN (order_items ⨝ products) —
+/// product names/SKUs live only on the products collection in the normalized
+/// schema. Ditto SDK 5.1 runs both joins on-device; sync subscriptions still
+/// can't JOIN, which is why items sync chain-wide.
 struct OrderDetailView: View {
-    let order: Order
+    let order: OrderSummaryRow
+    @Environment(AppState.self) private var appState
     @Environment(\.dittoColors) private var colors
-    @State private var items: [OrderItem] = []
+    @State private var items: [OrderLineRow] = []
     @State private var error: String?
 
-    static let itemsQuery = "SELECT * FROM order_items WHERE order_id = :orderId AND deleted = false"
+    static let itemsQuery = """
+    SELECT oi._id, oi.order_id, oi.product_id, oi.quantity, oi.unit_price, \
+    oi.discount_percent, oi.discount_amount, oi.line_total, p.product_name, p.sku \
+    FROM order_items AS oi INNER JOIN products AS p ON oi.product_id = p._id \
+    WHERE oi.order_id = :orderId AND oi.deleted = false
+    """
+
+    /// The store display name lives on the synced `stores` catalog (shared),
+    /// not on the order document — look it up instead of joining.
+    private var storeName: String {
+        appState.stores.first { $0.store_id == order.store_id }?.store_name ?? order.store_id
+    }
 
     var body: some View {
         ScrollView {
@@ -435,9 +470,9 @@ struct OrderDetailView: View {
                         Text(order.order_id)
                             .font(.dittoCode(size: 14))
                             .foregroundStyle(colors.foregroundNormal)
-                        Text(order.customer_name)
+                        Text(order.customerName)
                             .font(.title3).foregroundStyle(colors.foregroundNormal)
-                        Text("\(Formatters.dateTime(order.order_date)) · \(order.store_name)")
+                        Text("\(Formatters.dateTime(order.order_date)) · \(storeName)")
                             .foregroundStyle(colors.foregroundSubtle)
                         HStack {
                             AnvilBadge(order.status, status: .success)
@@ -460,9 +495,9 @@ struct OrderDetailView: View {
                         ForEach(items) { item in
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.product_name)
+                                    Text(item.product_name ?? item.product_id)
                                         .foregroundStyle(colors.foregroundNormal)
-                                    Text(item.sku)
+                                    Text(item.sku ?? "—")
                                         .font(.dittoCode(size: 11))
                                         .foregroundStyle(colors.foregroundSubtle)
                                 }
@@ -493,7 +528,7 @@ struct OrderDetailView: View {
                 items = try await DittoManager.shared.fetch(
                     Self.itemsQuery,
                     arguments: ["orderId": order.order_id],
-                    as: OrderItem.self
+                    as: OrderLineRow.self
                 )
             } catch is CancellationError {
                 // View torn down mid-fetch — not an error state.
@@ -504,9 +539,11 @@ struct OrderDetailView: View {
     }
 
     static let explanation = """
-    DQL v5.0 has no JOINs, so order detail is two queries: the list's live \
-    observer fetched this order, and this screen ran the second query — \
-    order_items filtered by order_id. That's the canonical DQL pattern the \
-    benchmark measures as the orders__select__by_id + order_items__select__by_order pair.
+    One INNER JOIN per hop: the list joined orders ⨝ customers for the name \
+    on this card, and this screen joins order_items ⨝ products for the item \
+    names and SKUs. The normalized dataset carries ids only (no embedded \
+    customer_name / product_name copies) — Ditto SDK 5.1 resolves them \
+    on-device. This is the benchmark's items__join__products shape with a \
+    parameterized order id.
     """
 }

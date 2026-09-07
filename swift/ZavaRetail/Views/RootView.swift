@@ -30,10 +30,19 @@ struct RootView: View {
                     .accessibilityIdentifier("boot.retry")
                 }
             case .ready:
-                if appState.selectedStoreId == nil {
+                if appState.selectedStoreId != nil {
+                    MainTabView()
+                } else if appState.showStorePicker || appState.stores.isEmpty {
+                    // Explicit "Switch store", or the catalog hasn't synced
+                    // yet (the picker's empty state doubles as the
+                    // "waiting for sync / seed Big Peer" hint).
                     StorePickerView()
                 } else {
-                    MainTabView()
+                    // First launch: the catalog synced and the loader-flagged
+                    // smallest store is being selected automatically — no
+                    // picker step (PLAN §4.1).
+                    ProgressView("Preparing your store…")
+                        .accessibilityIdentifier("autoSelect.store")
                 }
             }
         }

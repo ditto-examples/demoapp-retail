@@ -53,6 +53,8 @@ class _AppRootState extends ConsumerState<AppRoot> {
     final boot = ref.watch(appStateProvider);
     final selectedStoreId = ref.watch(appSelectedStoreIdProvider);
     final lastError = ref.watch(appLastErrorProvider);
+    final showPicker = ref.watch(appShowStorePickerProvider);
+    final stores = ref.watch(appStoresProvider);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -70,7 +72,23 @@ class _AppRootState extends ConsumerState<AppRoot> {
                 ),
               BootPhase.missingConfig => const _MissingConfigScreen(),
               BootPhase.failed => _FailedScreen(boot.failureMessage ?? 'unknown error', onRetry: () => ref.read(appStateProvider.notifier).retryBoot()),
-              BootPhase.ready => selectedStoreId == null ? const StorePickerScreen() : const MainTabs(),
+              BootPhase.ready => selectedStoreId != null
+                  ? const MainTabs()
+                  : (showPicker || stores.isEmpty)
+                      // Explicit "Switch store", or the catalog hasn't synced
+                      // yet (the picker's empty state doubles as the
+                      // "waiting for sync / seed Big Peer" hint).
+                      ? const StorePickerScreen()
+                      // First launch: the catalog synced and the
+                      // loader-flagged smallest store is being selected
+                      // automatically — no picker step (PLAN §4.1).
+                      : Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            const CircularProgressIndicator(key: Key('autoSelect.store')),
+                            const SizedBox(height: 12),
+                            Text('Preparing your store…', style: TextStyle(color: colors.foregroundSubtle)),
+                          ]),
+                        ),
             },
           ),
         ],

@@ -10,11 +10,14 @@ final class ZavaRetailTests: XCTestCase {
 
     func testBenchmarkCatalogLoadsAndGroups() throws {
         let catalog = try BenchmarkCatalog.load()
-        XCTAssertEqual(catalog.entries.count, 72, "the bundled catalog ships all 72 benchmarks")
+        XCTAssertEqual(catalog.entries.count, 96, "the bundled catalog ships all 96 benchmarks")
         let collections = catalog.groups.map(\.collection)
         XCTAssertTrue(collections.contains("orders"))
-        XCTAssertTrue(collections.contains("subscription"))
         XCTAssertTrue(collections.contains("order_items"))
+        XCTAssertTrue(
+            collections.contains("joins"),
+            "the retail-joins catalog's JOIN groups must ship in the bundle"
+        )
     }
 
     // MARK: - QueryPreparation
@@ -25,7 +28,13 @@ final class ZavaRetailTests: XCTestCase {
         pre: [String]? = nil,
         post: [String]? = nil
     ) -> BenchmarkEntry {
-        BenchmarkEntry(query: query, category: category, preQueries: pre, postQueries: post)
+        BenchmarkEntry(
+            query: query,
+            category: category,
+            preQueries: pre,
+            postQueries: post,
+            expected_count: nil
+        )
     }
 
     func testStoreSubstitution() {

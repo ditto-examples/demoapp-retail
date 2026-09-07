@@ -48,7 +48,7 @@ import live.ditto.zava.ui.components.ZavaSearchField
 import live.ditto.zava.ui.formatted
 
 /// The full 25K-row customer directory, synced unfiltered
-/// (subscription__customers_all — a walk-in could be anyone), PAGED with
+/// (a walk-in could be anyone), PAGED with
 /// LIMIT/OFFSET so the demo handles the full directory gracefully. "This store
 /// only" filters inside the query (customers__select__by_primary_store_id_*),
 /// not in memory. The search field runs one-shot point queries (debounced).
@@ -201,7 +201,7 @@ class CustomersState {
 }
 
 private const val customersScreenExplanation =
-    "The 25K-row customer directory is subscribed UNFILTERED (the benchmark's subscription__customers_all — a walk-in could be anyone), so this screen pages entirely on-device: LIMIT/OFFSET for the slice (ORDER BY last_name, first_name, _id) plus a live COUNT(*) observer for the total — the query above is the exact paged query running now.\n\n\"This store only\" filters IN the query (primary_store_id = your store — the benchmark's customers__select__by_primary_store_id shape), not in memory. Search: an '@' runs an exact-email lookup (customers__select__by_email — run its indexed/no-index pair side by side in the Query Runner); otherwise a name-prefix LIKE on first/last name, first 50 matches."
+    "The 25K-row customer directory is subscribed UNFILTERED (a walk-in could be anyone), so this screen pages entirely on-device: LIMIT/OFFSET for the slice (ORDER BY last_name, first_name, _id) plus a live COUNT(*) observer for the total — the query above is the exact paged query running now.\n\n\"This store only\" filters IN the query (primary_store_id = your store), not in memory. Search: an '@' runs an exact-email lookup (run the customers__select__by_id / indexed pairs side by side in the Query Runner); otherwise a name-prefix LIKE on first/last name, first 50 matches."
 
 @Composable
 fun CustomersScreen(appState: AppState, modifier: Modifier = Modifier) {

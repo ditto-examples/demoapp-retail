@@ -85,8 +85,6 @@ class RunnerTests {
 
     @Test
     fun evictCleanupCompositeId() {
-        // Latent case: no composite-id EVICT in today's catalog, but the
-        // cleanup derivation must handle it (or fail loudly).
         val e = entry(
             query = "EVICT FROM inventory WHERE _id = {'store_id': 'store_seattle', 'product_id': 'bench-prod'}",
             category = "EVICT",
@@ -96,6 +94,32 @@ class RunnerTests {
             "DELETE FROM inventory WHERE _id = {'store_id': 'store_seattle', 'product_id': 'bench-r2-prod'}",
             cleanup,
         )
+    }
+
+    @Test
+    fun evictCleanupBulkOrderId() {
+        // The joins catalog's bulk EVICT predicates on order_id, not _id
+        // (order_items__evict__bulk_by_order) — cleanup must still derive.
+        val e = entry(
+            query = "EVICT FROM order_items WHERE order_id = 'bench-bulk-evict'",
+            category = "EVICT",
+        )
+        val cleanup = QueryPreparation.evictCleanup(e) { it.replace("bench-", "bench-r9-") }
+        assertEquals("DELETE FROM order_items WHERE order_id = 'bench-r9-bulk-evict'", cleanup)
+    }
+
+    @Test
+    fun upsertIsMutating() {
+        // UPSERT writes bench docs — it needs the confirm gate + id suffixing.
+        val e = entry(
+            query = "INSERT INTO orders DOCUMENTS(deserialize_json('{\"_id\":\"bench-order-ups\"}')) ON ID CONFLICT DO UPDATE",
+            category = "UPSERT",
+            postQueries = listOf("EVICT FROM orders WHERE _id = 'bench-order-ups'"),
+        )
+        val prepared = QueryPreparation.prepare("orders__upsert__force_update", e, storeId = "store_seattle", runId = "run5")
+        assertTrue(prepared.isMutating)
+        assertTrue(prepared.query.contains("bench-run5-order-ups"))
+        assertEquals(listOf("DELETE FROM orders WHERE _id = 'bench-run5-order-ups'"), prepared.postQueries)
     }
 
     @Test

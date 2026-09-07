@@ -31,9 +31,12 @@ import live.ditto.zava.state.AppState
 import live.ditto.zava.ui.components.DittoBadge
 import live.ditto.zava.ui.components.DittoBadgeStatus
 
-/// The showcase flow: pick one of the 8 Zava stores (synced over the
-/// always-on shared `SELECT * FROM stores` subscription). Persisted via
-/// SharedPreferences; re-picking switches subscriptions.
+/// On-demand store picker (Dashboard header menu / "Switch store" on the
+/// Ditto tab): pick one of the 8 Zava stores (synced over the always-on
+/// shared `SELECT * FROM stores` subscription). First launch skips this
+/// screen: the app auto-selects the loader-flagged smallest-order store
+/// (`demo_default`). Persisted via SharedPreferences; re-picking switches
+/// subscriptions.
 @Composable
 fun StorePickerScreen(appState: AppState, modifier: Modifier = Modifier) {
     val colors = DittoColors.current

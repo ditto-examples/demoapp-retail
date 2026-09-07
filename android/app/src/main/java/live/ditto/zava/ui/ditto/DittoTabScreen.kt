@@ -68,7 +68,7 @@ fun DittoTabScreen(
         item {
             DittoRow("Query Runner", onOpenQueryRunner)
             Text(
-                "Browse and run the 72-query retail benchmark catalog against the synced store, with timing.",
+                "Browse and run the 96-query retail-JOINs benchmark catalog against the synced store, with timing.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.foregroundSubtle,
                 modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
@@ -135,7 +135,7 @@ private fun DittoRow(title: String, onClick: () -> Unit) {
 }
 
 private const val dittoTabExplanation =
-    "System & tools for the synced store. Query Runner browses and times the 72-query benchmark catalog against the live synced store. Sync status and Indexes are live views over Ditto's system:data_sync_info and system:indexes virtual collections (the query above). Ditto tools is the official diagnostic viewer. Switch store returns to the picker: picking a new store cancels the per-store subscriptions, EVICTs the old store's local data (EVICT is local-only — the difference from DELETE is a teaching moment), and subscribes to the new store."
+    "System & tools for the synced store. Query Runner browses and times the 96-query retail-JOINs benchmark catalog against the live synced store (JOINs run on-device, SDK 5.1+). Sync status and Indexes are live views over Ditto's system:data_sync_info and system:indexes virtual collections (the query above). Ditto tools is the official diagnostic viewer. Switch store shows the picker: picking a new store cancels the per-store subscriptions and EVICTs its local orders/inventory (EVICT is local-only — the difference from DELETE is a teaching moment); the chain-wide order-items ledger has no per-store slice to evict (normalized schema)."
 
 // MARK: - Sync status (system:data_sync_info)
 

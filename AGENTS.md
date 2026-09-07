@@ -1,6 +1,6 @@
 # AGENTS.md — Zava Retail demo apps
 
-Multi-platform demo monorepo for Ditto + the retail benchmark dataset.
+Multi-platform demo monorepo for Ditto + Microsoft's Zava DIY retail dataset.
 Read [PLAN.md](PLAN.md) before making architectural decisions; it records the
 locked decisions and the adversarial-review findings this repo's design
 answers.
@@ -19,16 +19,24 @@ answers.
   repository-protocol towers. These apps teach the SDK.
 - **Fix verification**: a finding needs two independent confirmations before
   it's called fixed; "it compiles" is not verification.
-- **Subscriptions go through one funnel** per app (store picker →
-  register/cancel); the four per-store subscription queries mirror the
-  benchmark's `subscription__*` queries verbatim with `:storeId` args.
+- **Subscriptions go through one funnel** per app (store selection →
+  register/cancel). The dataset is the normalized retail-joins shape: the
+  per-store subscriptions are `inventory`/`orders` by `:storeId`; the shared
+  tier adds the chain-wide `order_items` ledger (sync subscriptions reject
+  JOINs and items carry no store_id, so per-store item filtering is JOIN
+  queries in the screens, Ditto SDK 5.1+).
+- **Data bundle is committed**: `shared/data/*.ndjson.gz` (~17 MB, no LFS) —
+  regenerate with `scripts/prepare_data.py` (needs the restored MS backup,
+  `scripts/restore_ms_backup.sh`); never hand-edit.
 
 ## Commands
 
 | Task | Command |
 |---|---|
-| Load data | `python3 scripts/load_data.py --size 10k` (dry-run: `--dry-run`) |
+| Load data (full MS dataset) | `python3 scripts/load_data.py` (dry-run: `--dry-run`) |
 | Reset Big Peer data | `python3 scripts/load_data.py --clear` |
+| Restore MS backup (scratch container) | `scripts/restore_ms_backup.sh` |
+| Rebuild data bundle | `python3 scripts/prepare_data.py` (then re-run sync_benchmarks.sh) |
 | Re-vendor Anvil | `scripts/vendor_anvil.sh` |
 | Re-sync benchmark catalog | `scripts/sync_benchmarks.sh` |
 | Run tests | `python3 -m unittest discover -s tests -v` |
@@ -40,9 +48,32 @@ answers.
 
 ## Dataset
 
-Source of truth: `../dql-metrics-benchmark/benchmarks/retail` (NDJSON +
-`benchmarks.json`). The loader slices the *full-variant* files by order-count
-stride (1k/5k/10k/30k/100k) so all 8 stores are populated at every size, and
-always includes the anchor documents that benchmark query literals reference.
-Do not hand-edit `shared/benchmarks.json` — regenerate via
-`scripts/sync_benchmarks.sh`.
+The transaction data is **Microsoft's actual shipped Zava DIY dataset**
+(`zava_retail_2025_07_21_postgres_rls.backup` from Microsoft's
+ai-tour-26 repo, sibling checkout `../ai-tour-26-zava-diy-dataset-plus-mcp`),
+transformed by `scripts/prepare_data.py` into the normalized
+`retail-joins` document shape (Ditto SDK 5.1+ JOINs teach-through): 8 stores,
+9 categories, 89 product types, 424 products (real names/SKUs), 50,000
+customers, 3,392 inventory rows, **197,665 orders**, **414,241 order items**
+— 665,828 docs total, loaded wholesale (`--size` ladder removed).
+
+Microsoft's rows are honestly thin in places the apps/catalog exercise, so
+the transform flags every non-cosmetic derivation in
+`shared/data/manifest.json.synthesized_fields`: order `status` (deterministic
+60/26/10/4 spread — MS has no status), order totals (`subtotal`/`item_count`
+aggregated from the real line items; `total = 1.095 × subtotal`), store
+`location` (real WA geography per named store, fabricated address), inventory
+`location`/`last_counted` (deterministic fabrication). Ids become slugs
+(`store_seattle`, `customer_40000`, `order_197663`…); `order_items.store_id`
+is dropped (per-store reachability is the apps' headline JOIN through
+orders).
+
+The bundled catalog stays the 96-query `retail-joins` suite, EXCEPT that
+`shared/catalog_overrides.json` + `scripts/sync_benchmarks.sh` point the four
+suite *literals* at real MS rows (`order_197663`, `customer_40000`,
+`customer_23`, sku `HTHM001600`) and restate those entries' expected counts
+for our data (1 / 1 / 12 / 1; the anchor order has 5 line items). Do not
+hand-edit `shared/benchmarks.json` or `shared/data/` — regenerate via
+`scripts/prepare_data.py` then `scripts/sync_benchmarks.sh`. The loader
+reads `manifest.json` and stamps the fewest-orders store (Kirkland, 2,975)
+with `"demo_default": true` (the apps' first-launch default — no picker).

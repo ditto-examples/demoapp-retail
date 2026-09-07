@@ -3,9 +3,8 @@ import DittoSwift
 import OSLog
 import SwiftUI
 
-/// Dashboard KPI queries — derived from the benchmark's AGGREGATION entries
-/// (orders__aggregation__sum_total_by_status, orders__aggregation__count_by_month,
-/// order_items__aggregation__top_products_by_revenue, inventory__select__low_stock_*).
+/// Dashboard KPI queries — derived from the retail-joins benchmark catalog's
+/// aggregation entries (joins__agg__*, inventory__select__low_stock_* shapes).
 /// Aliases are added so rows decode into typed models; the exact string that
 /// executes is always shown in the card's info sheet.
 enum DashboardQueries {
@@ -29,20 +28,23 @@ enum DashboardQueries {
     SELECT * FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false \
     ORDER BY stock_level LIMIT 5
     """
-    /// subscription__customers_all is unfiltered — this count is the shared
-    /// directory every device holds (25K docs).
+    /// The full customer directory is an unfiltered subscription — this count
+    /// is the shared directory every device holds (25K docs).
     static let customersCount = "SELECT COUNT(*) AS count FROM customers WHERE deleted = false"
     /// The shared catalog (400 products, unfiltered subscription).
     static let productsCount = "SELECT COUNT(*) AS count FROM products WHERE deleted = false"
-    /// Top products by revenue — verbatim order_items__aggregation__top_products_by_revenue
-    /// apart from the LIMIT the card's pull-down controls (5/10/25/50/100).
-    /// DQL v5.0 GROUP BY projects only group keys + aggregates, so product
-    /// names resolve client-side against the synced catalog.
+    /// Top products by revenue for the selected store. order_items has no
+    /// store_id in the normalized schema — the store filter applies to the
+    /// parent order through an INNER JOIN (the suite's canonical "items via
+    /// orders" shape). LIMIT comes from the card's pull-down (5/10/25/50/100).
+    /// DQL GROUP BY projects only group keys + aggregates, so product names
+    /// resolve client-side against the synced catalog.
     static func topProducts(limit: Int) -> String {
         """
-        SELECT product_id, SUM(line_total) AS revenue \
-        FROM order_items WHERE store_id = :storeId AND deleted = false \
-        GROUP BY product_id ORDER BY revenue DESC LIMIT \(limit)
+        SELECT oi.product_id, SUM(oi.line_total) AS revenue \
+        FROM order_items AS oi INNER JOIN orders AS o ON oi.order_id = o._id \
+        WHERE o.store_id = :storeId AND o.deleted = false AND oi.deleted = false \
+        GROUP BY oi.product_id ORDER BY revenue DESC LIMIT \(limit)
         """
     }
 
@@ -662,8 +664,8 @@ private enum Explanations {
     """
     static let customersCount = """
     Counts the customer documents synced to this device. The app subscribes to \
-    ALL customers unfiltered (subscription__customers_all) — a walk-in could be \
-    anyone, so the whole 25K-row directory lives on device.
+    ALL customers unfiltered — a walk-in could be anyone, so the whole 25K-row \
+    directory lives on device.
     """
     static let productsCount = """
     Counts the shared product catalog synced to this device (400 docs). The \
@@ -681,9 +683,11 @@ private enum Explanations {
     """
     static let topProducts = """
     Sums line totals per product across this store's order items and takes the \
-    top N by revenue (the pull-down sets N). DQL v5.0 has no JOINs, so the query \
-    projects product_id only and names resolve against the synced catalog. \
-    This card is a live observer: values climb as sync delivers the store.
+    top N by revenue (the pull-down sets N). Items carry no store of their own \
+    in the normalized schema — the store filter rides an INNER JOIN to the \
+    parent order. The GROUP BY projects product_id only, so names resolve \
+    against the synced catalog. This card is a live observer: values climb as \
+    sync delivers the store.
     """
 }
 

@@ -31,95 +31,50 @@ class EndpointNormalization(unittest.TestCase):
         self.assertEqual(host, "h.example")
 
 
-class AnchorExtraction(unittest.TestCase):
-    def test_classification(self):
-        with tempfile.TemporaryDirectory() as td:
-            bench = S.make_synthetic_benchmarks(Path(td))
-            orders, uuids, emails = ld.extract_anchor_literals(bench)
-        self.assertIn(S.ANCHOR_ORDER, orders)
-        self.assertIn(S.ANCHOR_CUSTOMER_UUID, uuids)
-        self.assertIn(S.ANCHOR_ITEM, uuids)       # resolved to items later
-        self.assertIn(S.PHANTOM_UUID, uuids)      # store rls id — phantom
-        self.assertIn(S.ANCHOR_EMAIL, emails)
-        # index names / DQL keywords are not captured as anchors
-        self.assertFalse(any("orders_cust" in o for o in orders))
-        self.assertNotIn("orders_cust", uuids)
-
-
-class StrideSlicing(unittest.TestCase):
-    """Synthetic dataset: 100 orders, total_orders=100. A stride of 10 picks
-    exactly lines {0,10,...,90}; every anchor is deliberately off-stride."""
-
+class BundleReading(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        root = Path(self._tmp.name)
-        self.dataset = S.make_synthetic_dataset(root / "data")
-        self.bench = S.make_synthetic_benchmarks(root)
-        self.empty_bench = root / "empty_benchmarks.json"
-        self.empty_bench.write_text("{}")
+        self.dataset = S.make_synthetic_bundle(Path(self._tmp.name) / "data")
 
     def tearDown(self):
         self._tmp.cleanup()
 
-    def plan(self, n=10, bench=None, full_catalog=False):
-        return ld.plan_slices(n, self.dataset, bench or self.bench,
-                              full_catalog, total_orders=S.N_ORDERS)
+    def test_expected_counts_from_manifest(self):
+        manifest = ld.read_manifest(self.dataset)
+        counts = ld.expected_counts(self.dataset, manifest)
+        self.assertEqual(counts["orders"], sum(S.STORE_ORDER_COUNTS.values()))
+        self.assertEqual(counts["order_items"], 12)
+        self.assertEqual(counts["product_types"], 1)
 
-    def test_exact_stride_count_without_anchors(self):
-        plan = ld.plan_slices(10, self.dataset, self.empty_bench, False,
-                              total_orders=S.N_ORDERS)
-        self.assertEqual(len(plan["order_ids"]), 10)
+    def test_expected_counts_fall_back_to_line_counts(self):
+        # No manifest at all -> count the files directly (stores get no flag).
+        broken = Path(self._tmp.name) / "nomanifest"
+        import shutil
+        shutil.copytree(self.dataset, broken, ignore=shutil.ignore_patterns("manifest.json"))
+        counts = ld.expected_counts(broken, ld.read_manifest(broken))
+        self.assertEqual(counts["orders"], sum(S.STORE_ORDER_COUNTS.values()))
 
-    def test_determinism(self):
-        a, b = self.plan(), self.plan()
-        self.assertEqual(a["order_ids"], b["order_ids"])
-        self.assertEqual(a["customer_ids"], b["customer_ids"])
+    def test_reads_gzip_and_plain(self):
+        docs = [d for d, _ in ld.iter_ndjson(self.dataset / "orders.ndjson.gz")]
+        self.assertEqual(len(docs), sum(S.STORE_ORDER_COUNTS.values()))
+        plain = Path(self._tmp.name) / "plain.ndjson"
+        plain.write_text('{"a": 1}\n{"a": 2}\n')
+        self.assertEqual(len([d for d, _ in ld.iter_ndjson(plain)]), 2)
 
-    def test_all_stores_and_full_timeline_at_tiny_size(self):
-        plan = self.plan(10)
-        docs = [d for d, _ in ld.collection_docs("orders", self.dataset, plan)]
-        self.assertEqual({d["store_id"] for d in docs}, set(S.STORE_IDS))
-        years = {d["order_date"][:4] for d in docs}
-        self.assertIn("2022", years)
-        self.assertIn("2025", years)
+    def test_demo_default_stamped_exactly_once(self):
+        docs = [d for d, _ in ld.collection_docs("stores", self.dataset, S.DEFAULT_STORE)]
+        flagged = [d["_id"] for d in docs if d.get("demo_default") is True]
+        self.assertEqual(flagged, [S.DEFAULT_STORE])
+        self.assertTrue(all(d.get("demo_default") is False
+                            for d in docs if d["_id"] != S.DEFAULT_STORE))
 
-    def test_anchors_always_included(self):
-        plan = self.plan(10)
-        self.assertIn(S.ANCHOR_ORDER, plan["order_ids"])               # by-id literal
-        self.assertIn(S.ANCHOR_ITEM_PARENT, plan["order_ids"])         # parent of item anchor
-        self.assertIn(S.ANCHOR_ITEM, plan["item_ids"])                 # item literal resolved
-        self.assertIn(S.ANCHOR_CUSTOMER_UUID, plan["customer_ids"])    # by-customer literal
-        self.assertIn(S.ANCHOR_EMAIL_CUSTOMER, plan["customer_ids"])   # email resolved
-        # anchor customer's orders are pulled in too (by-customer query non-zero)
-        self.assertIn(S.order_id(9), plan["order_ids"])                # customer 9, i=9
-        a = plan["anchors"]
-        self.assertEqual(a["phantom_literals"], 1)
-        self.assertEqual(a["item_literals"], 1)
+    def test_no_default_store_stamps_nothing(self):
+        docs = [d for d, _ in ld.collection_docs("stores", self.dataset, None)]
+        self.assertTrue(all(d.get("demo_default") is False for d in docs))
 
-    def test_referential_integrity(self):
-        plan = self.plan(10)
-        orders = {d["_id"]: d for d, _ in ld.collection_docs("orders", self.dataset, plan)}
-        items = [d for d, _ in ld.collection_docs("order_items", self.dataset, plan)]
-        customers = {d["_id"] for d, _ in ld.collection_docs("customers", self.dataset, plan)}
-        for item in items:
-            self.assertIn(item["order_id"], orders)
-        for order in orders.values():
-            self.assertIn(order["customer_id"], customers)
-        # the anchor item itself loads, and its parent order is in the slice
-        self.assertIn(S.ANCHOR_ITEM, {d["_id"] for d in items})
-
-    def test_size_covers_total_loads_everything(self):
-        plan = self.plan(S.N_ORDERS)  # size >= total
-        self.assertTrue(plan["all_customers"])
-        customers = list(ld.collection_docs("customers", self.dataset, plan))
-        self.assertEqual(len(customers), S.N_CUSTOMERS)
-        orders = list(ld.collection_docs("orders", self.dataset, plan))
-        self.assertEqual(len(orders), S.N_ORDERS)
-
-    def test_full_catalog_flag(self):
-        plan = self.plan(10, full_catalog=True)
-        customers = list(ld.collection_docs("customers", self.dataset, plan))
-        self.assertEqual(len(customers), S.N_CUSTOMERS)
+    def test_non_store_collections_pass_through_untouched(self):
+        docs = [d for d, _ in ld.collection_docs("orders", self.dataset, S.DEFAULT_STORE)]
+        self.assertFalse(any("demo_default" in d for d in docs))
 
 
 class Batching(unittest.TestCase):
@@ -258,42 +213,34 @@ class ArgumentValidation(unittest.TestCase):
                     ld.main()
             return cm.exception.code
 
-    def test_nonpositive_concurrency(self):
-        self.assertEqual(self.run_main(["--size", "1k", "--concurrency", "0"]), 2)
+    def test_clear_with_dry_run_rejected(self):
+        self.assertEqual(self.run_main(["--clear", "--dry-run"]), 2)
 
-    def test_clear_with_size_rejected(self):
-        self.assertEqual(self.run_main(["--clear", "--size", "1k"]), 2)
-
-    def test_dry_run_alone_rejected(self):
-        self.assertEqual(self.run_main(["--dry-run"]), 2)
+    def test_clear_with_verify_only_rejected(self):
+        self.assertEqual(self.run_main(["--clear", "--verify-only"]), 2)
 
     def test_unknown_collection_rejected(self):
-        self.assertEqual(self.run_main(["--size", "1k", "--only", "bogus"]), 2)
+        self.assertEqual(self.run_main(["--only", "bogus"]), 2)
 
-    def test_no_action_rejected(self):
-        self.assertEqual(self.run_main([]), 2)
+    def test_nonpositive_concurrency(self):
+        self.assertEqual(self.run_main(["--concurrency", "0"]), 2)
 
 
 class DryRunSmoke(unittest.TestCase):
-    """End-to-end argparse -> planning -> printed table, hermetic + offline."""
+    """End-to-end argparse -> manifest/counts -> printed table, offline."""
 
-    def test_dry_run_against_synthetic_dataset(self):
+    def test_dry_run_against_synthetic_bundle(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            dataset = S.make_synthetic_dataset(root / "data")
-            bench = S.make_synthetic_benchmarks(root)
-            argv = ["load_data.py", "--size", "1k", "--dry-run",
-                    "--dataset-dir", str(dataset), "--benchmarks", str(bench),
-                    "--total-orders", str(S.N_ORDERS)]
+            dataset = S.make_synthetic_bundle(Path(td) / "data")
+            argv = ["load_data.py", "--dry-run", "--dataset-dir", str(dataset)]
             out = io.StringIO()
             with mock.patch("sys.argv", argv), contextlib.redirect_stdout(out):
                 rc = ld.main()
             text = out.getvalue()
         self.assertEqual(rc, 0)
-        # size 1k (1000) >= synthetic total (100) -> everything loads
         self.assertIn("orders", text)
-        self.assertIn(f"{S.N_ORDERS} docs", text)
-        self.assertIn("phantom", text)
+        self.assertIn(f"{sum(S.STORE_ORDER_COUNTS.values())} docs", text)
+        self.assertIn(S.DEFAULT_STORE, text)
 
 
 if __name__ == "__main__":

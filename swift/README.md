@@ -23,8 +23,8 @@ open ZavaRetail.xcodeproj   # pick a simulator/device; macOS "My Mac" works too
 ```
 
 Prereqs: Xcode 26+, XcodeGen (`brew install xcodegen`), and the repository
-root `.env` (see `../.env.template`). Seed Big Peer first:
-`python3 ../scripts/load_data.py --size 10k` (or `100k`).
+root `.env` (see `../.env.template`). Seed Big Peer first (full transformed
+Microsoft dataset, ~36 s on a free M0): `python3 ../scripts/load_data.py`.
 
 Regenerate the project whenever files are added/removed (no synchronized
 groups): `xcodegen`.
@@ -69,6 +69,6 @@ launch on macOS (iOS uses the Info.plist `UIAppFonts` key).
   error surface.
 - `Views/` — Dashboard / Orders / Products / Customers / Ditto (Query Runner,
   sync status, indexes, DittoAllToolsMenu, switch store).
-- `Models/BenchmarkCatalog.swift` — the bundled 72-query catalog + the
-  substitution rules for running benchmarks on a synced device (store
+- `Models/BenchmarkCatalog.swift` — the bundled 96-query retail-JOINs catalog
+  + the substitution rules for running benchmarks on a synced device (store
   literal, per-run bench ids, EVICT→DELETE cleanup).

@@ -1,10 +1,13 @@
 import 'dart:math';
 
-/// Models mirror the retail benchmark's document shapes 1:1 (snake_case field
-/// names match the collection fields exactly, so the document → model mapping
-/// stays visible — these apps teach the SDK, not hide it). Required fields
-/// throw loudly on null/missing (matching the Swift/Kotlin decode contract);
-/// optional fields default to null.
+/// Models mirror the retail-joins benchmark's document shapes 1:1 (snake_case
+/// field names match the collection fields exactly, so the document → model
+/// mapping stays visible — these apps teach the SDK, not hide it). The schema
+/// is NORMALIZED (Ditto SDK 5.1+ JOINs): orders carry no customer/store
+/// display fields, order_items carry no store_id/sku/product_name —
+/// cross-collection display goes through INNER JOIN queries at the call sites.
+/// Required fields throw loudly on null/missing (matching the Swift/Kotlin
+/// decode contract); optional fields default to null.
 
 class AppError implements Exception {
   AppError(this.message);
@@ -22,6 +25,7 @@ class Store {
     required this.is_online,
     required this.location,
     required this.deleted,
+    this.demo_default,
   });
 
   final String id;
@@ -32,6 +36,10 @@ class Store {
   final StoreLocation location;
   final bool deleted;
 
+  /// Stamped by scripts/load_data.py on the store with the fewest orders in
+  /// the loaded slice — the apps' first-launch default.
+  final bool? demo_default;
+
   factory Store.fromJson(Map<String, dynamic> j) => Store(
         id: j['_id'] as String,
         store_id: j['store_id'] as String,
@@ -40,6 +48,7 @@ class Store {
         is_online: j['is_online'] as bool,
         location: StoreLocation.fromJson(j['location'] as Map<String, dynamic>),
         deleted: j['deleted'] as bool,
+        demo_default: j['demo_default'] as bool?,
       );
 }
 
@@ -74,6 +83,22 @@ class Category {
       );
 }
 
+class ProductType {
+  ProductType({required this.id, required this.type_id, required this.category_id, required this.type_name, required this.deleted});
+  final String id;
+  final String type_id;
+  final String category_id;
+  final String type_name;
+  final bool deleted;
+  factory ProductType.fromJson(Map<String, dynamic> j) => ProductType(
+        id: j['_id'] as String,
+        type_id: j['type_id'] as String,
+        category_id: j['category_id'] as String,
+        type_name: j['type_name'] as String,
+        deleted: j['deleted'] as bool,
+      );
+}
+
 class Product {
   Product({
     required this.id,
@@ -81,6 +106,7 @@ class Product {
     required this.sku,
     required this.product_name,
     required this.category_id,
+    this.type_id,
     required this.cost,
     required this.base_price,
     required this.gross_margin_percent,
@@ -91,6 +117,7 @@ class Product {
   final String sku;
   final String product_name;
   final String category_id;
+  final String? type_id;
   final double cost;
   final double base_price;
   final double gross_margin_percent;
@@ -101,6 +128,7 @@ class Product {
         sku: j['sku'] as String,
         product_name: j['product_name'] as String,
         category_id: j['category_id'] as String,
+        type_id: j['type_id'] as String?,
         cost: (j['cost'] as num).toDouble(),
         base_price: (j['base_price'] as num).toDouble(),
         gross_margin_percent: (j['gross_margin_percent'] as num).toDouble(),
@@ -206,9 +234,6 @@ class Order {
     required this.customer_id,
     required this.store_id,
     required this.order_date,
-    required this.customer_name,
-    this.customer_email,
-    required this.store_name,
     required this.item_count,
     required this.subtotal,
     required this.total,
@@ -220,9 +245,6 @@ class Order {
   final String customer_id;
   final String store_id;
   final String order_date;
-  final String customer_name;
-  final String? customer_email;
-  final String store_name;
   final int item_count;
   final double subtotal;
   final double total;
@@ -234,9 +256,6 @@ class Order {
         customer_id: j['customer_id'] as String,
         store_id: j['store_id'] as String,
         order_date: j['order_date'] as String,
-        customer_name: j['customer_name'] as String,
-        customer_email: j['customer_email'] as String?,
-        store_name: j['store_name'] as String,
         item_count: (j['item_count'] as num).toInt(),
         subtotal: (j['subtotal'] as num).toDouble(),
         total: (j['total'] as num).toDouble(),
@@ -248,40 +267,123 @@ class Order {
 class OrderItem {
   OrderItem({
     required this.id,
+    this.order_item_id,
     required this.order_id,
-    required this.store_id,
     required this.product_id,
-    required this.sku,
-    required this.product_name,
     required this.quantity,
     required this.unit_price,
     required this.discount_percent,
+    this.discount_amount,
     required this.line_total,
     required this.deleted,
   });
   final String id;
+  final String? order_item_id;
   final String order_id;
-  final String store_id;
   final String product_id;
-  final String sku;
-  final String product_name;
   final int quantity;
   final double unit_price;
   final double discount_percent;
+  final double? discount_amount;
   final double line_total;
   final bool deleted;
   factory OrderItem.fromJson(Map<String, dynamic> j) => OrderItem(
         id: j['_id'] as String,
+        order_item_id: j['order_item_id'] as String?,
         order_id: j['order_id'] as String,
-        store_id: j['store_id'] as String,
         product_id: j['product_id'] as String,
-        sku: j['sku'] as String,
-        product_name: j['product_name'] as String,
         quantity: (j['quantity'] as num).toInt(),
         unit_price: (j['unit_price'] as num).toDouble(),
         discount_percent: (j['discount_percent'] as num).toDouble(),
+        discount_amount: (j['discount_amount'] as num?)?.toDouble(),
         line_total: (j['line_total'] as num).toDouble(),
         deleted: j['deleted'] as bool,
+      );
+}
+
+/// Row shape of the orders screen's INNER JOIN (orders ⨝ customers) — the
+/// normalized replacement for v5.0's denormalized orders.customer_name: the
+/// customer's display name comes from the join, not the order document.
+class OrderSummaryRow {
+  OrderSummaryRow({
+    required this.order_id,
+    required this.store_id,
+    required this.order_date,
+    required this.status,
+    required this.subtotal,
+    required this.total,
+    required this.item_count,
+    required this.customer_id,
+    this.first_name,
+    this.last_name,
+  });
+  final String order_id;
+
+  // == the order doc's `_id` (order ids are `order_…` slugs). Computed, NOT
+  // deserialized: registerObserver emissions on JOINs namespace `_id` per
+  // collection alias ({o: …, c: …}) — never project `o._id` there.
+  String get id => order_id;
+  final String store_id;
+  final String order_date;
+  final String status;
+  final double subtotal;
+  final double total;
+  final int item_count;
+  final String customer_id;
+  final String? first_name;
+  final String? last_name;
+  String get customerName =>
+      [first_name, last_name].whereType<String>().join(' ');
+  factory OrderSummaryRow.fromJson(Map<String, dynamic> j) => OrderSummaryRow(
+        order_id: j['order_id'] as String,
+        store_id: j['store_id'] as String,
+        order_date: j['order_date'] as String,
+        status: j['status'] as String,
+        subtotal: (j['subtotal'] as num).toDouble(),
+        total: (j['total'] as num).toDouble(),
+        item_count: (j['item_count'] as num).toInt(),
+        customer_id: j['customer_id'] as String,
+        first_name: j['first_name'] as String?,
+        last_name: j['last_name'] as String?,
+      );
+}
+
+/// Row shape of the order-detail JOIN (order_items ⨝ products) — the
+/// normalized replacement for denormalized order_items.product_name/sku.
+class OrderLineRow {
+  OrderLineRow({
+    required this.id,
+    required this.order_id,
+    required this.product_id,
+    required this.quantity,
+    required this.unit_price,
+    required this.discount_percent,
+    this.discount_amount,
+    required this.line_total,
+    this.product_name,
+    this.sku,
+  });
+  final String id;
+  final String order_id;
+  final String product_id;
+  final int quantity;
+  final double unit_price;
+  final double discount_percent;
+  final double? discount_amount;
+  final double line_total;
+  final String? product_name;
+  final String? sku;
+  factory OrderLineRow.fromJson(Map<String, dynamic> j) => OrderLineRow(
+        id: j['_id'] as String,
+        order_id: j['order_id'] as String,
+        product_id: j['product_id'] as String,
+        quantity: (j['quantity'] as num).toInt(),
+        unit_price: (j['unit_price'] as num).toDouble(),
+        discount_percent: (j['discount_percent'] as num).toDouble(),
+        discount_amount: (j['discount_amount'] as num?)?.toDouble(),
+        line_total: (j['line_total'] as num).toDouble(),
+        product_name: j['product_name'] as String?,
+        sku: j['sku'] as String?,
       );
 }
 

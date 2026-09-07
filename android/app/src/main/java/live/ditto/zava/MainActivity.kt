@@ -40,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,7 +57,7 @@ import kotlinx.serialization.Serializable
 import live.ditto.anvil.material3.DittoColors
 import live.ditto.anvil.material3.DittoTheme
 import live.ditto.zava.model.InventoryItem
-import live.ditto.zava.model.Order
+import live.ditto.zava.model.OrderSummaryRow
 import live.ditto.zava.model.Product
 import live.ditto.zava.state.AppState
 import live.ditto.zava.ui.customers.CustomersScreen
@@ -81,7 +82,7 @@ import live.ditto.zava.ui.queries.QueryCatalogScreen
 sealed interface Route : NavKey {
     @Serializable data object Home : Route
     @Serializable data object Orders : Route
-    @Serializable data class OrderDetail(val order: Order) : Route
+    @Serializable data class OrderDetail(val order: OrderSummaryRow) : Route
     @Serializable data object Products : Route
     @Serializable data class ProductDetail(val product: Product, val stock: InventoryItem?) : Route
     @Serializable data object Customers : Route
@@ -192,10 +193,32 @@ private fun AppRoot(appState: AppState) {
                     }
                     AppState.Boot.MissingConfig -> MissingConfigScreen()
                     is AppState.Boot.Failed -> ErrorScreen(state.message, onRetry = { appState.retryBoot() })
-                    AppState.Boot.Ready -> if (selectedStoreId == null) {
-                        StorePickerScreen(appState)
-                    } else {
-                        MainTabs(appState)
+                    AppState.Boot.Ready -> {
+                        val showPicker by appState.showStorePicker.collectAsStateWithLifecycle()
+                        val stores by appState.stores.collectAsStateWithLifecycle()
+                        when {
+                            selectedStoreId != null -> MainTabs(appState)
+                            // Explicit "Switch store", or the catalog hasn't
+                            // synced yet (the picker's empty state doubles as
+                            // the "waiting for sync / seed Big Peer" hint).
+                            showPicker || stores.isEmpty() -> StorePickerScreen(appState)
+                            // First launch: the catalog synced and the
+                            // loader-flagged smallest store is being selected
+                            // automatically — no picker step (PLAN §4.1).
+                            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    CircularProgressIndicator()
+                                    Text(
+                                        "Preparing your store…",
+                                        color = colors.foregroundSubtle,
+                                        modifier = Modifier.testTag("autoSelect.store"),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -346,7 +369,7 @@ private fun MainTabs(appState: AppState) {
                 entryProvider = entryProvider {
                     entry<Route.Home> { DashboardScreen(appState) }
                     entry<Route.Orders> { OrdersScreen(appState, onOpenOrder = { navigate(Route.OrderDetail(it)) }) }
-                    entry<Route.OrderDetail> { entry -> OrderDetailScreen(entry.order) }
+                    entry<Route.OrderDetail> { entry -> OrderDetailScreen(entry.order, appState) }
                     entry<Route.Products> {
                         ProductsScreen(appState, onOpenProduct = { product, stock -> navigate(Route.ProductDetail(product, stock)) })
                     }

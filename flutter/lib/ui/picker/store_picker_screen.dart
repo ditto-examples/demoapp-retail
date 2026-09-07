@@ -5,9 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/app_state.dart';
 import '../components.dart';
 
-/// The showcase flow: pick one of the 8 Zava stores (synced over the
-/// always-on shared `SELECT * FROM stores` subscription). Persisted via
-/// shared_preferences; re-picking switches subscriptions.
+/// On-demand store picker (Dashboard header menu / "Switch store" on the
+/// Ditto tab): pick one of the 8 Zava stores (synced over the always-on
+/// shared `SELECT * FROM stores` subscription). First launch skips this
+/// screen: the app auto-selects the loader-flagged smallest-order store
+/// (`demo_default`). Persisted via shared_preferences; re-picking switches
+/// subscriptions.
 class StorePickerScreen extends ConsumerWidget {
   const StorePickerScreen({super.key});
 

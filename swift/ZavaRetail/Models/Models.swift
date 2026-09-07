@@ -1,8 +1,11 @@
 import Foundation
 
-// Models mirror the retail benchmark's document shapes 1:1 (snake_case
+// Models mirror the retail-joins benchmark's document shapes 1:1 (snake_case
 // property names match the collection fields exactly, so the document → model
-// mapping stays visible — these apps teach the SDK, not hide it).
+// mapping stays visible — these apps teach the SDK, not hide it). The schema
+// is NORMALIZED (Ditto SDK 5.1+ JOINs): orders carry no customer/store display
+// fields, order_items carry no store_id/sku/product_name — cross-collection
+// display goes through INNER JOIN queries at the call sites.
 // All models are immutable Sendable value types: they cross from the
 // DittoManager actor / observer delivery queues to @MainActor UI state.
 
@@ -21,6 +24,9 @@ struct Store: Sendable, Codable, Identifiable, Equatable {
     let is_online: Bool
     let location: Location
     let deleted: Bool
+    /// Stamped by scripts/load_data.py on the store with the fewest orders in
+    /// the loaded slice — the apps' first-launch default (PLAN §4.1).
+    let demo_default: Bool?
 
     var id: String {
         _id
@@ -39,12 +45,25 @@ struct Category: Sendable, Codable, Identifiable, Equatable {
     }
 }
 
+struct ProductType: Sendable, Codable, Identifiable, Equatable {
+    let _id: String
+    let type_id: String
+    let category_id: String
+    let type_name: String
+    let deleted: Bool
+
+    var id: String {
+        _id
+    }
+}
+
 struct Product: Sendable, Codable, Identifiable, Equatable {
     let _id: String
     let product_id: String
     let sku: String
     let product_name: String
     let category_id: String
+    let type_id: String?
     let cost: Double
     let base_price: Double
     let gross_margin_percent: Double
@@ -107,9 +126,6 @@ struct Order: Sendable, Codable, Identifiable, Equatable {
     let customer_id: String
     let store_id: String
     let order_date: String
-    let customer_name: String
-    let customer_email: String?
-    let store_name: String
     let item_count: Int
     let subtotal: Double
     let total: Double
@@ -123,16 +139,69 @@ struct Order: Sendable, Codable, Identifiable, Equatable {
 
 struct OrderItem: Sendable, Codable, Identifiable, Equatable {
     let _id: String
+    let order_item_id: String?
     let order_id: String
-    let store_id: String
     let product_id: String
-    let sku: String
-    let product_name: String
     let quantity: Int
     let unit_price: Double
     let discount_percent: Double
+    let discount_amount: Double?
     let line_total: Double
     let deleted: Bool
+
+    var id: String {
+        _id
+    }
+}
+
+/// Row shape of the orders screen's INNER JOIN (orders ⨝ customers) — the
+/// normalized replacement for v5.0's denormalized orders.customer_name: the
+/// customer's display name comes from the join, not from the order document.
+///
+/// NOTE: `_id` is computed from `order_id` (== the order doc's `_id`) rather
+/// than projected: `registerObserver` on a JOIN emits `_id` namespaced per
+/// collection alias ({o: …, c: …}), which breaks a `String` decode, while
+/// one-shot `execute` returns the projected alias flat. Never project
+/// `o._id` in a JOIN that an observer consumes (JoinObserverContractTests).
+struct OrderSummaryRow: Sendable, Codable, Identifiable, Equatable {
+    let order_id: String
+    let store_id: String
+    let order_date: String
+    let status: String
+    let subtotal: Double
+    let total: Double
+    let item_count: Int
+    let customer_id: String
+    let first_name: String?
+    let last_name: String?
+
+    /// == the order doc's `_id` (order ids are `order_…` slugs).
+    var _id: String {
+        order_id
+    }
+
+    var id: String {
+        _id
+    }
+
+    var customerName: String {
+        [first_name, last_name].compactMap(\.self).joined(separator: " ")
+    }
+}
+
+/// Row shape of the order-detail JOIN (order_items ⨝ products) — the
+/// normalized replacement for denormalized order_items.product_name/sku.
+struct OrderLineRow: Sendable, Codable, Identifiable, Equatable {
+    let _id: String
+    let order_id: String
+    let product_id: String
+    let quantity: Int
+    let unit_price: Double
+    let discount_percent: Double
+    let discount_amount: Double?
+    let line_total: Double
+    let product_name: String?
+    let sku: String?
 
     var id: String {
         _id

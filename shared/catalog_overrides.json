@@ -1,0 +1,9 @@
+{
+  "comment": "Literal substitutions applied to shared/benchmarks.json by scripts/sync_benchmarks.sh (via scripts/catalog_overrides.py). The retail-joins suite's literals name rows in the benchmark's OWN generated dataset; our apps load Microsoft's shipped dataset, so these point at REAL Microsoft rows instead (see shared/data/manifest.json -> catalog_anchors). Never hand-edit shared/benchmarks.json; edit this file and re-run sync_benchmarks.sh.",
+  "literals": {
+    "order_20221209_0001": "order_197663",
+    "e652232a-95ab-4fcf-86b7-e40cea3d749d": "customer_40000",
+    "d30977d3-fa5d-4e13-9175-f637bccc4c87": "customer_23",
+    "HND-0042": "HTHM001600"
+  }
+}

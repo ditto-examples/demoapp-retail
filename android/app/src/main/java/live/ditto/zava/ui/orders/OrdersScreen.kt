@@ -44,8 +44,8 @@ import live.ditto.anvil.material3.DittoColors
 import live.ditto.anvil.material3.DittoMonoFontFamily
 import live.ditto.zava.data.DittoManager
 import live.ditto.zava.model.CountRow
-import live.ditto.zava.model.Order
-import live.ditto.zava.model.OrderItem
+import live.ditto.zava.model.OrderLineRow
+import live.ditto.zava.model.OrderSummaryRow
 import live.ditto.zava.model.Paging
 import live.ditto.zava.state.AppState
 import live.ditto.zava.ui.Formatters
@@ -60,14 +60,17 @@ import live.ditto.zava.ui.components.ZavaSearchField
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
-/// The orders list is a live, PAGED store observer (PLAN §4.2.2): the page
-/// slice is `ORDER BY order_date DESC LIMIT pageSize OFFSET (page-1)*pageSize`
-/// and the total comes from a COUNT observer — both live-update as sync runs.
+/// The orders list is a live, PAGED store observer over an INNER JOIN
+/// (orders ⨝ customers — PLAN §4.2.2): the page slice is
+/// `ORDER BY o.order_date DESC LIMIT pageSize OFFSET (page-1)*pageSize` and
+/// the total comes from a COUNT observer over the same join — both
+/// live-update as sync runs. The join replaces v5.0's denormalized
+/// `orders.customer_name`; the normalized dataset carries customer ids only.
 /// The "recent" filter anchors to max(order_date) in the local store — the
 /// dataset ends 2025-06-27, so a device-clock-relative filter would show
 /// zero rows.
 class OrdersState {
-    var orders by mutableStateOf<List<Order>>(emptyList())
+    var orders by mutableStateOf<List<OrderSummaryRow>>(emptyList())
     var totalCount by mutableStateOf(0)
     var page by mutableStateOf(1)
     var pageSize by mutableStateOf(25)
@@ -82,9 +85,9 @@ class OrdersState {
     /// case-insensitive ILIKE queries with 500 ms debounce; the paged observer
     /// drives the list otherwise.
     var searchText by mutableStateOf("")
-    var searchResults by mutableStateOf<List<Order>?>(null)
+    var searchResults by mutableStateOf<List<OrderSummaryRow>?>(null)
     val isSearching: Boolean get() = searchResults != null
-    val visibleOrders: List<Order> get() = searchResults ?: orders
+    val visibleOrders: List<OrderSummaryRow> get() = searchResults ?: orders
 
     private var pageObserver: DittoStoreObserver? = null
     private var countObserver: DittoStoreObserver? = null
@@ -102,15 +105,31 @@ class OrdersState {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     companion object {
-        /// DQL ILIKE (LIKE's case-insensitive variant) on both order number and
-        /// customer name.
-        const val searchQuery = """
-            SELECT * FROM orders WHERE store_id = :storeId AND deleted = false
-            AND (order_id ILIKE :like OR customer_name ILIKE :like)
-            ORDER BY order_date DESC, _id DESC LIMIT 50
-        """
+        /// Projection shared by the paged observer and search — one row per
+        /// order with the joined customer display name. Does NOT project
+        /// `o._id`: registerObserver emissions on JOINs namespace `_id` per
+        /// collection alias ({o: …, c: …}) which breaks a String decode —
+        /// the row derives `_id` from `order_id` (== the order doc's _id).
+        const val selectList =
+            "o.order_id, o.store_id, o.order_date, o.status, o.subtotal, " +
+                "o.total, o.item_count, o.customer_id, c.first_name, c.last_name"
 
-        const val baseWhere = "FROM orders WHERE store_id = :storeId AND deleted = false"
+        /// The joined FROM up to and including the store/deleted predicates;
+        /// the "Recent only" cutoff is appended when active.
+        const val joinedFrom =
+            "FROM orders AS o INNER JOIN customers AS c ON o.customer_id = c._id " +
+                "WHERE o.store_id = :storeId AND o.deleted = false"
+
+        /// DQL ILIKE (LIKE's case-insensitive variant) on order number and both
+        /// customer name fields — the name lives on `customers`, reached
+        /// through the join.
+        val searchQuery = """
+            SELECT $selectList $joinedFrom
+            AND (o.order_id ILIKE :like OR c.first_name ILIKE :like OR c.last_name ILIKE :like)
+            ORDER BY o.order_date DESC, o._id DESC LIMIT 50
+        """.trimIndent()
+
+        const val baseFrom = joinedFrom
 
         /// Search input cleanup: trim whitespace and drop leading '#' characters —
         /// the list renders order numbers as "#20250115_0001" but the stored id is
@@ -171,7 +190,7 @@ class OrdersState {
                     restart(appState)
                 }
             }
-            pageObserver = DittoManager.observe<Order>(built.pageQuery, built.arguments) { orders = it }
+            pageObserver = DittoManager.observe<OrderSummaryRow>(built.pageQuery, built.arguments) { orders = it }
             error = null
         } catch (e: kotlinx.coroutines.CancellationException) {
             // View torn down mid-restart — not an error state.
@@ -181,13 +200,13 @@ class OrdersState {
     }
 
     private suspend fun buildQueries(storeId: String): BuiltQueries {
-        var whereClause = baseWhere
+        var fromClause = baseFrom
         val arguments = mutableMapOf<String, Any?>("storeId" to storeId)
         if (recentOnly) {
             val maxDate = latestOrderDate(storeId)
             val cutoff = maxDate?.let { cutoffDate(it, 30) }
             if (maxDate != null && cutoff != null) {
-                whereClause += " AND order_date > :cutoff"
+                fromClause += " AND o.order_date > :cutoff"
                 arguments["cutoff"] = cutoff
             }
         }
@@ -195,12 +214,12 @@ class OrdersState {
         // Unique tiebreaker: OFFSET paging over a non-unique key can skip or
         // repeat rows across pages.
         val pageQuery = Paging.pageQuery(
-            base = "SELECT * $whereClause",
-            orderBy = "order_date DESC, _id DESC",
+            base = "SELECT $selectList $fromClause",
+            orderBy = "o.order_date DESC, o._id DESC",
             page = page,
             pageSize = pageSize,
         )
-        val countQuery = "SELECT COUNT(*) AS count $whereClause"
+        val countQuery = "SELECT COUNT(*) AS count $fromClause"
         var displayQuery = pageQuery
         for ((key, value) in arguments) {
             displayQuery = displayQuery.replace(":$key", "'$value'")
@@ -234,8 +253,8 @@ class OrdersState {
             // sleep must not fetch the old store's rows into the new context.
             val storeId = appState.selectedStoreId.value ?: return@launch
             try {
-                val results = DittoManager.fetch<Order>(
-                    searchQuery.trimIndent(),
+                val results = DittoManager.fetch<OrderSummaryRow>(
+                    searchQuery,
                     mapOf("storeId" to storeId, "like" to "%$term%"),
                 )
                 if (!isActive) return@launch
@@ -272,7 +291,7 @@ class OrdersState {
 }
 
 @Composable
-fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Modifier = Modifier) {
+fun OrdersScreen(appState: AppState, onOpenOrder: (OrderSummaryRow) -> Unit, modifier: Modifier = Modifier) {
     val state = remember { OrdersState() }
     val selectedStoreId by appState.selectedStoreId.collectAsStateWithLifecycle()
     val colors = DittoColors.current
@@ -290,12 +309,12 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
     // args resolved inline while searching, else the live paged observer query.
     val displayedQuery = if (state.isSearching && selectedStoreId != null) {
         val term = OrdersState.sanitizedSearchTerm(state.searchText)
-        OrdersState.searchQuery.trimIndent()
+        OrdersState.searchQuery
             .replace(":storeId", "'$selectedStoreId'")
             .replace(":like", "'%$term%'")
     } else {
         state.activeQuery.ifEmpty {
-            "SELECT * ${OrdersState.baseWhere} ORDER BY order_date DESC"
+            "SELECT ${OrdersState.selectList} ${OrdersState.baseFrom} ORDER BY o.order_date DESC"
         }
     }
 
@@ -397,10 +416,10 @@ fun OrdersScreen(appState: AppState, onOpenOrder: (Order) -> Unit, modifier: Mod
 private data class MaxDateRow(val max_date: String? = null)
 
 private const val ordersScreenExplanation =
-    "The orders list is a LIVE observer over this store's synced orders — new matches appear as sync delivers them, no refresh step. The query shown above is the exact one running (cutoff/args resolved).\n\nPagination is LIMIT/OFFSET in DQL: the visible slice runs ORDER BY order_date DESC, _id DESC LIMIT <pageSize> OFFSET <(page−1)×pageSize>, while a second live observer runs COUNT(*) over the same WHERE — so the page count climbs as sync delivers. The _id tiebreaker keeps OFFSET paging stable (no skipped or repeated rows across pages).\n\n\"Recent only\" anchors to max(order_date) IN THE DATA (the benchmark dataset ends 2025-06-27), not the device clock — a naive now-minus-30-days filter would show zero rows. Search runs one-shot case-insensitive ILIKE queries on order number and customer name (500 ms debounce, capped at 50 rows) — '%' and '_' in your input act as wildcards, and search matches across all dates (it ignores the \"Recent only\" filter); clear it (×) to return to the live paged list."
+    "The orders list is a LIVE observer over this store's orders INNER JOINed to customers — the normalized schema carries customer ids only, so the name on each row comes from the join (Ditto SDK 5.1, on-device). New matches appear as sync delivers them, no refresh step. The query shown above is the exact one running (cutoff/args resolved).\n\nPagination is LIMIT/OFFSET in DQL over the join: the visible slice runs ORDER BY o.order_date DESC, o._id DESC LIMIT <pageSize> OFFSET <(page−1)×pageSize>, while a second live observer runs COUNT(*) over the same joined FROM — so the page count climbs as sync delivers. The o._id tiebreaker keeps OFFSET paging stable (no skipped or repeated rows across pages).\n\n\"Recent only\" anchors to max(order_date) IN THE DATA (the benchmark dataset ends 2025-06-27), not the device clock — a naive now-minus-30-days filter would show zero rows. Search runs one-shot case-insensitive ILIKE queries on order number and the JOINED customer's first/last name (500 ms debounce, capped at 50 rows) — '%' and '_' in your input act as wildcards, and search matches across all dates (it ignores the \"Recent only\" filter); clear it (×) to return to the live paged list."
 
 @Composable
-private fun OrderRow(order: Order, onClick: () -> Unit) {
+private fun OrderRow(order: OrderSummaryRow, onClick: () -> Unit) {
     val colors = DittoColors.current
     Row(
         modifier = Modifier
@@ -416,7 +435,7 @@ private fun OrderRow(order: Order, onClick: () -> Unit) {
                 color = colors.foregroundNormal,
             )
             Text(
-                "${order.customer_name} · ${Formatters.dateTime(order.order_date)}",
+                "${order.customerName} · ${Formatters.dateTime(order.order_date)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.foregroundSubtle,
             )
@@ -437,20 +456,27 @@ private fun OrderRow(order: Order, onClick: () -> Unit) {
     }
 }
 
-/// Order detail = order + its items via the canonical two-query pattern.
-/// DQL v5.0 has no JOINs: the first query fetched the order (the list's
-/// observer), this screen runs the second (items by order_id).
+/// Order detail = the order row (already joined to its customer by the list)
+/// plus its line items through a second INNER JOIN (order_items ⨝ products) —
+/// product names/SKUs live only on the products collection in the normalized
+/// schema. Ditto SDK 5.1 runs both joins on-device; sync subscriptions still
+/// can't JOIN, which is why items sync chain-wide.
 @Composable
-fun OrderDetailScreen(order: Order, modifier: Modifier = Modifier) {
+fun OrderDetailScreen(order: OrderSummaryRow, appState: AppState, modifier: Modifier = Modifier) {
     val colors = DittoColors.current
-    var items by remember { mutableStateOf<List<OrderItem>>(emptyList()) }
+    var items by remember { mutableStateOf<List<OrderLineRow>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // The store display name lives on the synced `stores` catalog (shared),
+    // not on the order document — look it up instead of joining.
+    val stores by appState.stores.collectAsStateWithLifecycle()
+    val storeName = stores.firstOrNull { it.store_id == order.store_id }?.store_name ?: order.store_id
 
     PublishScreenInfo(OrderDetailQueries.itemsQuery, OrderDetailQueries.explanation)
 
     LaunchedEffect(order.id) {
         try {
-            items = DittoManager.fetch<OrderItem>(
+            items = DittoManager.fetch<OrderLineRow>(
                 OrderDetailQueries.itemsQuery,
                 mapOf("orderId" to order.order_id),
             )
@@ -474,9 +500,9 @@ fun OrderDetailScreen(order: Order, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.bodyMedium.copy(fontFamily = DittoMonoFontFamily),
                     color = colors.foregroundNormal,
                 )
-                Text(order.customer_name, style = MaterialTheme.typography.titleLarge, color = colors.foregroundNormal)
+                Text(order.customerName, style = MaterialTheme.typography.titleLarge, color = colors.foregroundNormal)
                 Text(
-                    "${Formatters.dateTime(order.order_date)} · ${order.store_name}",
+                    "${Formatters.dateTime(order.order_date)} · $storeName",
                     color = colors.foregroundSubtle,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -500,9 +526,9 @@ fun OrderDetailScreen(order: Order, modifier: Modifier = Modifier) {
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            Text(item.product_name, color = colors.foregroundNormal)
+                            Text(item.product_name ?: item.product_id, color = colors.foregroundNormal)
                             Text(
-                                item.sku,
+                                item.sku ?: "—",
                                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = DittoMonoFontFamily),
                                 color = colors.foregroundSubtle,
                             )
@@ -528,6 +554,11 @@ fun OrderDetailScreen(order: Order, modifier: Modifier = Modifier) {
 }
 
 private object OrderDetailQueries {
-    const val itemsQuery = "SELECT * FROM order_items WHERE order_id = :orderId AND deleted = false"
-    const val explanation = "DQL v5.0 has no JOINs, so order detail is two queries: the list's live observer fetched this order, and this screen ran the second query — order_items filtered by order_id. That's the canonical DQL pattern the benchmark measures as the orders__select__by_id + order_items__select__by_order pair."
+    const val itemsQuery =
+        "SELECT oi._id, oi.order_id, oi.product_id, oi.quantity, oi.unit_price, " +
+            "oi.discount_percent, oi.discount_amount, oi.line_total, p.product_name, p.sku " +
+            "FROM order_items AS oi INNER JOIN products AS p ON oi.product_id = p._id " +
+            "WHERE oi.order_id = :orderId AND oi.deleted = false"
+    const val explanation =
+        "One INNER JOIN per hop: the list joined orders ⨝ customers for the name on this card, and this screen joins order_items ⨝ products for the item names and SKUs. The normalized dataset carries ids only (no embedded customer_name / product_name copies) — Ditto SDK 5.1 resolves them on-device. This is the benchmark's items__join__products shape with a parameterized order id."
 }

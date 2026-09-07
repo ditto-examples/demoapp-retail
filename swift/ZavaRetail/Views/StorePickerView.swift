@@ -1,9 +1,11 @@
 import Anvil
 import SwiftUI
 
-/// First-launch store picker (also reachable via "Switch store" on the Ditto
-/// tab). The stores arrive over the shared-catalog subscription — if the list
-/// is empty, sync is still warming up (or the dataset isn't loaded yet).
+/// On-demand store picker (Dashboard header menu / "Switch store" on the
+/// Ditto tab). First launch skips it: the app auto-selects the loader-flagged
+/// smallest-order store (`demo_default`). The stores arrive over the
+/// shared-catalog subscription — if the list is empty, sync is still warming
+/// up (or the dataset isn't loaded yet).
 struct StorePickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dittoColors) private var colors

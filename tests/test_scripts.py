@@ -4,6 +4,7 @@ Each script computes REPO_ROOT from its own location, so tests copy the script
 into a tmp dir (making the tmp dir the "repo root") and run it against fixture
 trees — the real vendor/ and shared/ are never touched.
 """
+import gzip
 import json
 import os
 import shutil
@@ -17,6 +18,7 @@ import _support as S
 
 VENDOR_SH = S.REPO_ROOT / "scripts" / "vendor_anvil.sh"
 SYNC_SH = S.REPO_ROOT / "scripts" / "sync_benchmarks.sh"
+OVERRIDES_PY = S.REPO_ROOT / "scripts" / "catalog_overrides.py"
 
 
 def run(script: Path, *args: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -150,7 +152,7 @@ class SyncBenchmarksScript(unittest.TestCase):
         shutil.copy(SYNC_SH, self.script)
         self.script.chmod(self.script.stat().st_mode | stat.S_IXUSR)
         self.bench_repo = self.root / "bench-repo"
-        (self.bench_repo / "benchmarks/retail").mkdir(parents=True)
+        (self.bench_repo / "benchmarks/retail-joins").mkdir(parents=True)
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -158,7 +160,7 @@ class SyncBenchmarksScript(unittest.TestCase):
     def test_syncs_catalog_and_provenance(self):
         catalog = {"a__select__x": {"query": "SELECT 1", "category": "SELECT"},
                    "b__select__y": {"query": "SELECT 2", "category": "SELECT"}}
-        (self.bench_repo / "benchmarks/retail/benchmarks.json").write_text(json.dumps(catalog))
+        (self.bench_repo / "benchmarks/retail-joins/benchmarks.json").write_text(json.dumps(catalog))
         res = run(self.script, str(self.bench_repo), cwd=self.root)
         self.assertEqual(res.returncode, 0, res.stderr)
         out = self.root / "shared/benchmarks.json"
@@ -167,13 +169,57 @@ class SyncBenchmarksScript(unittest.TestCase):
         self.assertTrue((self.root / "shared/COMMIT").exists())
 
     def test_rejects_empty_catalog(self):
-        (self.bench_repo / "benchmarks/retail/benchmarks.json").write_text("{}")
+        (self.bench_repo / "benchmarks/retail-joins/benchmarks.json").write_text("{}")
         res = run(self.script, str(self.bench_repo), cwd=self.root)
         self.assertNotEqual(res.returncode, 0)
 
     def test_missing_catalog(self):
         res = run(self.script, str(self.bench_repo), cwd=self.root)
         self.assertNotEqual(res.returncode, 0)
+
+    def test_applies_literal_overrides_when_present(self):
+        # The sync step points the suite's literals at real Microsoft rows
+        # (overrides file) and restates the patched entries' expected counts
+        # against the committed bundle.
+        catalog = {
+            "orders__select__by_id": {
+                "query": "SELECT * FROM orders WHERE _id = 'bench-order-1'",
+                "expected_count": 1, "expected_first_rows_hash": "sha256:x",
+                "category": "SELECT",
+            },
+            "stores__select__all": {"query": "SELECT * FROM stores", "category": "SELECT"},
+        }
+        (self.bench_repo / "benchmarks/retail-joins/benchmarks.json").write_text(json.dumps(catalog))
+        shutil.copy(OVERRIDES_PY, self.root / "scripts" / "catalog_overrides.py")
+        shared = self.root / "shared"
+        shared.mkdir()
+        (shared / "catalog_overrides.json").write_text(json.dumps({
+            "literals": {"bench-order-1": "order_2"}
+        }))
+        # Two orders in the toy bundle; order_2 exists.
+        data = shared / "data"
+        data.mkdir()
+        docs = [{"_id": "order_1"}, {"_id": "order_2"}]
+        with open(data / "orders.ndjson.gz", "wb") as raw:
+            with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+                gz.write("".join(json.dumps(d) + "\n" for d in docs).encode())
+
+        res = run(self.script, str(self.bench_repo), cwd=self.root)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        out = json.loads((shared / "benchmarks.json").read_text())
+        self.assertIn("order_2", out["orders__select__by_id"]["query"])
+        self.assertEqual(out["orders__select__by_id"]["expected_count"], 1)
+        self.assertNotIn("expected_first_rows_hash", out["orders__select__by_id"])
+        self.assertEqual(out["stores__select__all"], catalog["stores__select__all"],
+                         "unpatched entries stay byte-identical")
+
+    def test_sync_works_without_overrides_file(self):
+        # No overrides file in shared/ -> verbatim copy (previous behavior).
+        catalog = {"a__select__x": {"query": "SELECT 1", "category": "SELECT"}}
+        (self.bench_repo / "benchmarks/retail-joins/benchmarks.json").write_text(json.dumps(catalog))
+        res = run(self.script, str(self.bench_repo), cwd=self.root)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(json.loads((self.root / "shared/benchmarks.json").read_text()), catalog)
 
 
 if __name__ == "__main__":

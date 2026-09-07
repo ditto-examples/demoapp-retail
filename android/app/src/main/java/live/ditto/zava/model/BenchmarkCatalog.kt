@@ -4,16 +4,21 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.util.UUID
 
-/// Bundled shared/benchmarks.json — the 72-query retail benchmark catalog
-/// (asset). Key = benchmark name (<collection>__<descriptor>), value = entry.
+/// Bundled shared/benchmarks.json — the 96-query retail-JOINs DQL benchmark
+/// catalog (asset). Key = benchmark name (<collection>__<descriptor>),
+/// value = entry.
 @Serializable
 data class BenchmarkEntry(
     val query: String,
     val category: String,
     val preQueries: List<String>? = null,
     val postQueries: List<String>? = null,
+    /// The harness's oracle count for this query on the full dataset —
+    /// displayed next to the device's result count in the runner (sliced
+    /// datasets legitimately differ; the runner copy says so).
+    val expected_count: Int? = null,
 ) {
-    val isMutating: Boolean get() = category in setOf("INSERT", "UPDATE", "DELETE", "EVICT")
+    val isMutating: Boolean get() = category in setOf("INSERT", "UPDATE", "DELETE", "EVICT", "UPSERT")
 }
 
 class AppError(message: String) : Exception(message)
@@ -170,16 +175,18 @@ object QueryPreparation {
     }
 
     /// EVICT benchmarks carry no cleanup of their own; derive a propagating
-    /// DELETE from the EVICT's `_id = …` predicate (scalar or composite).
+    /// DELETE reusing the EVICT's whole WHERE clause — scalar/composite
+    /// `_id` targets and bulk `order_id = 'bench-…-bulk-…'` predicates alike.
     fun evictCleanup(entry: BenchmarkEntry, transform: (String) -> String): String? {
         if (entry.category != "EVICT") return null
-        val idMatch = Regex("_id\\s*=\\s*(\\{[^}]+\\}|'[^']+')").find(entry.query) ?: return null
+        val whereMatch = Regex("\\bWHERE\\b", RegexOption.IGNORE_CASE).find(entry.query) ?: return null
         val collectionMatch = Regex("EVICT\\s+FROM\\s+\\w+", RegexOption.IGNORE_CASE).find(entry.query) ?: return null
         val collection = collectionMatch.value
             .replace(Regex("EVICT\\s+FROM\\s+", RegexOption.IGNORE_CASE), "")
             .trim()
         if (collection.isEmpty()) return null
-        val predicate = transform(idMatch.value)
+        val predicate = transform(entry.query.substring(whereMatch.range.last + 1).trim())
+        if (predicate.isEmpty()) return null
         return "DELETE FROM $collection WHERE $predicate"
     }
 }

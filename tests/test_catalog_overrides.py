@@ -57,7 +57,7 @@ OVERRIDES = {
 
 
 class ApplyOverrides(unittest.TestCase):
-    def test_substitutes_query_and_sql_equivalent_and_reports_touched(self):
+    def test_substitutes_query_and_reports_touched(self):
         catalog = make_catalog()
         touched = co.apply_overrides(catalog, OVERRIDES)
         self.assertIn("orders__select__by_id", touched)
@@ -66,7 +66,10 @@ class ApplyOverrides(unittest.TestCase):
         self.assertIn("products__select__by_sku_indexed", touched)
         self.assertNotIn("orders__select__by_store_indexed", touched)
         self.assertIn("order_6", catalog["orders__select__by_id"]["query"])
-        self.assertIn("order_6", catalog["orders__select__by_id"]["sql_equivalent"])
+        # sql_equivalent stays byte-identical: it describes the upstream PG
+        # schema (integer ids) — slug substitution would corrupt it.
+        self.assertEqual(catalog["orders__select__by_id"]["sql_equivalent"],
+                         make_catalog()["orders__select__by_id"]["sql_equivalent"])
         self.assertIn("HTHM000001", catalog["products__select__by_sku_indexed"]["query"])
         # untouched entries stay byte-identical
         self.assertIn("store_seattle", catalog["orders__select__by_store_indexed"]["query"])

@@ -61,7 +61,7 @@ class LogicTests {
     @Test
     fun ordersSearchTermSanitization() {
         assertEquals("20250115", OrdersState.sanitizedSearchTerm("  20250115  "))
-        assertEquals("20250115_0001", OrdersState.sanitizedSearchTerm("#20250115_0001"))
+        assertEquals("197663", OrdersState.sanitizedSearchTerm("#197663")) // list renders order_197663 as #197663
         assertEquals("", OrdersState.sanitizedSearchTerm("##"))
         assertEquals("", OrdersState.sanitizedSearchTerm("   "))
         assertEquals("2025%", OrdersState.sanitizedSearchTerm("2025%")) // wildcards pass through

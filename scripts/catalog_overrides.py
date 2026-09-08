@@ -37,7 +37,8 @@ _BY_ID_ONE = [
     "orders__join__store_info_projection",
     "customers__select__by_id",
 ]
-_ITEMS_FOR_ANCHOR_ORDER = ["items__join__orders", "items__join__products"]
+_ITEMS_FOR_ANCHOR_ORDER = ["items__join__orders", "items__join__products",
+                           "order_items__select__by_order_indexed"]
 _ORDERS_FOR_ANCHOR_CUSTOMER = ["customer__join__orders", "customer__join__orders_unfiltered"]
 _BY_SKU_ONE = ["products__select__by_sku_indexed"]
 _RECOMPUTED = set(_BY_ID_ONE + _ITEMS_FOR_ANCHOR_ORDER
@@ -46,12 +47,16 @@ _RECOMPUTED = set(_BY_ID_ONE + _ITEMS_FOR_ANCHOR_ORDER
 
 def apply_overrides(catalog: dict, overrides: dict) -> list[str]:
     """Substitute override literals inside query/preQueries/postQueries.
-    Returns the sorted names of entries that changed."""
+    Returns the sorted names of entries that changed.
+
+    sql_equivalent is deliberately LEFT UNTOUCHED: it documents the suite's
+    PostgreSQL form, whose literal ids are integers in MS's restored schema —
+    string-slug substitution there would corrupt it, and apps never execute it."""
     literals = overrides.get("literals", {})
     touched = []
     for name, entry in catalog.items():
         changed = False
-        for key in ("query", "sql_equivalent"):
+        for key in ("query",):
             text = entry.get(key, "")
             new = text
             for old, repl in literals.items():

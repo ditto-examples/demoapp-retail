@@ -1,7 +1,7 @@
 {
   "customers__select__by_id": {
     "query": "SELECT * FROM customers WHERE _id = 'customer_40000'",
-    "sql_equivalent": "SELECT * FROM customers WHERE customer_id = 'customer_40000'",
+    "sql_equivalent": "SELECT * FROM customers WHERE customer_id = 'e652232a-95ab-4fcf-86b7-e40cea3d749d'",
     "expected_count": 1,
     "category": "SELECT"
   },
@@ -13,7 +13,7 @@
   },
   "orders__select__by_id": {
     "query": "SELECT * FROM orders WHERE _id = 'order_197663'",
-    "sql_equivalent": "SELECT * FROM orders WHERE order_id = 'order_197663'",
+    "sql_equivalent": "SELECT * FROM orders WHERE order_id = 'order_20221209_0001'",
     "expected_count": 1,
     "category": "SELECT"
   },
@@ -36,7 +36,7 @@
       "CREATE INDEX products_sku ON products (sku)"
     ],
     "query": "SELECT * FROM products WHERE sku = 'HTHM001600'",
-    "sql_equivalent": "SELECT * FROM products WHERE sku = 'HTHM001600'",
+    "sql_equivalent": "SELECT * FROM products WHERE sku = 'HND-0042'",
     "postQueries": [
       "DROP INDEX IF EXISTS products_sku ON products"
     ],
@@ -68,13 +68,12 @@
       "CREATE INDEX items_order ON order_items (order_id)"
     ],
     "query": "SELECT * FROM order_items WHERE order_id = 'order_197663'",
-    "sql_equivalent": "SELECT * FROM order_items WHERE order_id = 'order_197663'",
+    "sql_equivalent": "SELECT * FROM order_items WHERE order_id = 'order_20221209_0001'",
     "postQueries": [
       "DROP INDEX IF EXISTS items_order ON order_items"
     ],
-    "expected_count": 2,
-    "category": "INDEX_SELECT",
-    "expected_first_rows_hash": "sha256:331caef030ca2c37cec8dd9c5a7a826735cec3e8e84e385c825c4b63c10334eb"
+    "expected_count": 5,
+    "category": "INDEX_SELECT"
   },
   "stores__select__all": {
     "query": "SELECT * FROM stores WHERE deleted = false",
@@ -92,7 +91,7 @@
   },
   "orders__join__store_info": {
     "query": "SELECT o._id, o.total, s.store_name, s.location.city FROM orders AS o INNER JOIN stores AS s ON o.store_id = s._id WHERE o._id = 'order_197663'",
-    "sql_equivalent": "SELECT o.order_id, o.total, s.store_name, s.location_city FROM orders AS o INNER JOIN stores AS s ON o.store_id = s.store_id WHERE o.order_id = 'order_197663'",
+    "sql_equivalent": "SELECT o.order_id, o.total, s.store_name, s.location_city FROM orders AS o INNER JOIN stores AS s ON o.store_id = s.store_id WHERE o.order_id = 'order_20221209_0001'",
     "expected_count": 1,
     "category": "JOIN_INNER",
     "preQueries": [
@@ -118,7 +117,7 @@
   },
   "orders__join__store_info_projection": {
     "query": "SELECT o._id FROM orders AS o INNER JOIN stores AS s ON o.store_id = s._id WHERE o._id = 'order_197663'",
-    "sql_equivalent": "SELECT o.order_id FROM orders AS o INNER JOIN stores AS s ON o.store_id = s.store_id WHERE o.order_id = 'order_197663'",
+    "sql_equivalent": "SELECT o.order_id FROM orders AS o INNER JOIN stores AS s ON o.store_id = s.store_id WHERE o.order_id = 'order_20221209_0001'",
     "expected_count": 1,
     "category": "JOIN_INNER",
     "preQueries": [
@@ -131,7 +130,7 @@
   },
   "items__join__products": {
     "query": "SELECT i._id, i.quantity, p.product_name, p.base_price FROM order_items AS i INNER JOIN products AS p ON i.product_id = p._id WHERE i.order_id = 'order_197663'",
-    "sql_equivalent": "SELECT i.order_item_id, i.quantity, p.product_name, p.base_price FROM order_items AS i INNER JOIN products AS p ON i.product_id = p.product_id WHERE i.order_id = 'order_197663'",
+    "sql_equivalent": "SELECT i.order_item_id, i.quantity, p.product_name, p.base_price FROM order_items AS i INNER JOIN products AS p ON i.product_id = p.product_id WHERE i.order_id = 'order_20221209_0001'",
     "expected_count": 5,
     "category": "JOIN_INNER",
     "preQueries": [
@@ -144,7 +143,7 @@
   },
   "items__join__orders": {
     "query": "SELECT i._id, i.quantity, o.order_date, o.total FROM order_items AS i INNER JOIN orders AS o ON i.order_id = o._id WHERE i.order_id = 'order_197663'",
-    "sql_equivalent": "SELECT i.order_item_id, i.quantity, o.order_date, o.total FROM order_items AS i INNER JOIN orders AS o ON i.order_id = o.order_id WHERE i.order_id = 'order_197663'",
+    "sql_equivalent": "SELECT i.order_item_id, i.quantity, o.order_date, o.total FROM order_items AS i INNER JOIN orders AS o ON i.order_id = o.order_id WHERE i.order_id = 'order_20221209_0001'",
     "expected_count": 5,
     "category": "JOIN_INNER",
     "preQueries": [
@@ -234,7 +233,7 @@
   },
   "customer__join__orders": {
     "query": "SELECT o._id, o.total, o.order_date FROM customers AS c INNER JOIN orders AS o ON o.customer_id = c._id WHERE c._id = 'customer_23' AND o.deleted = false",
-    "sql_equivalent": "SELECT o.order_id, o.total, o.order_date FROM customers AS c INNER JOIN orders AS o ON o.customer_id = c.customer_id WHERE c.customer_id = 'customer_23' AND o.deleted = 0",
+    "sql_equivalent": "SELECT o.order_id, o.total, o.order_date FROM customers AS c INNER JOIN orders AS o ON o.customer_id = c.customer_id WHERE c.customer_id = 'd30977d3-fa5d-4e13-9175-f637bccc4c87' AND o.deleted = 0",
     "expected_count": 12,
     "category": "JOIN_INNER",
     "preQueries": [
@@ -247,7 +246,7 @@
   },
   "customer__join__orders_unfiltered": {
     "query": "SELECT o._id, o.total, o.order_date FROM customers AS c INNER JOIN orders AS o ON o.customer_id = c._id WHERE c._id = 'customer_23'",
-    "sql_equivalent": "SELECT o.order_id, o.total, o.order_date FROM customers AS c INNER JOIN orders AS o ON o.customer_id = c.customer_id WHERE c.customer_id = 'customer_23'",
+    "sql_equivalent": "SELECT o.order_id, o.total, o.order_date FROM customers AS c INNER JOIN orders AS o ON o.customer_id = c.customer_id WHERE c.customer_id = 'd30977d3-fa5d-4e13-9175-f637bccc4c87'",
     "expected_count": 12,
     "category": "JOIN_INNER",
     "preQueries": [

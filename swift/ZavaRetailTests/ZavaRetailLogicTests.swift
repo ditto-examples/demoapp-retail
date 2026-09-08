@@ -393,9 +393,9 @@ final class ZavaRetailLogicTests: XCTestCase {
 
     func testOrdersSearchTermSanitization() {
         // Whitespace is trimmed; leading '#' is stripped because the list
-        // renders "order_20250115_0001" as "#20250115_0001".
+        // renders "order_197663" as "#197663".
         XCTAssertEqual(OrdersState.sanitizedSearchTerm("  20250115  "), "20250115")
-        XCTAssertEqual(OrdersState.sanitizedSearchTerm("#20250115_0001"), "20250115_0001")
+        XCTAssertEqual(OrdersState.sanitizedSearchTerm("#197663"), "197663")
         XCTAssertEqual(OrdersState.sanitizedSearchTerm("##"), "")
         XCTAssertEqual(OrdersState.sanitizedSearchTerm("   "), "")
         // '%'/'_' pass through as ILIKE wildcards (documented in the sheet).

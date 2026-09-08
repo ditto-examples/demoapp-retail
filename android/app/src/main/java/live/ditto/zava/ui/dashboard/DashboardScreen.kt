@@ -96,9 +96,9 @@ object DashboardQueries {
         ORDER BY stock_level LIMIT 5
     """
     /// The full customer directory is an unfiltered subscription — this count
-    /// is the shared directory every device holds (25K docs).
+    /// is the shared directory every device holds (50K docs).
     const val customersCount = "SELECT COUNT(*) AS count FROM customers WHERE deleted = false"
-    /// The shared catalog (400 products, unfiltered subscription).
+    /// The shared catalog (424 products, unfiltered subscription).
     const val productsCount = "SELECT COUNT(*) AS count FROM products WHERE deleted = false"
 
     /// Top products by revenue for the selected store. order_items has no
@@ -114,7 +114,7 @@ object DashboardQueries {
         GROUP BY oi.product_id ORDER BY revenue DESC LIMIT $limit
     """
 
-    /// The whole catalog is small (400 docs) — observed live so aggregate rows
+    /// The whole catalog is small (424 docs) — observed live so aggregate rows
     /// (product_id only) can display product names.
     const val productsCatalog = "SELECT * FROM products WHERE deleted = false"
 }
@@ -254,8 +254,8 @@ private const val dashboardScreenExplanation =
 
 private object Explanations {
     const val statusRevenue = "Counts this store's non-deleted orders and sums their totals, grouped by status. It's the benchmark's by-status aggregation scoped to your store — the same DQL shape the performance suite measures."
-    const val customersCount = "Counts the customer documents synced to this device. The app subscribes to ALL customers unfiltered — a walk-in could be anyone, so the whole 25K-row directory lives on device."
-    const val productsCount = "Counts the shared product catalog synced to this device (400 docs). The catalog is subscribed unfiltered: a rep can sell anything, from any store."
+    const val customersCount = "Counts the customer documents synced to this device. The app subscribes to ALL customers unfiltered — a walk-in could be anyone, so the whole 50K-row directory lives on device."
+    const val productsCount = "Counts the shared product catalog synced to this device (424 docs). The catalog is subscribed unfiltered: a rep can sell anything, from any store."
     const val monthlyTrend = "Groups this store's orders into calendar months with substr(order_date, 0, 7) (DQL's substr is zero-based — a classic gotcha) and shows the latest 12. One of the heavier aggregation queries in the benchmark."
     const val lowStock = "Counts and lists inventory rows at your store with fewer than 5 units left. The store filter rides the composite _id subfield (_id.store_id) — the benchmark's index-backed \"low stock alert\" query."
     const val topProducts = "Sums line totals per product across this store's order items and takes the top N by revenue (the pull-down sets N). Items carry no store of their own in the normalized schema — the store filter rides an INNER JOIN to the parent order. The GROUP BY projects product_id only, so names resolve against the synced catalog. This card is a live observer: values climb as sync delivers the store."

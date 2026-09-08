@@ -173,6 +173,9 @@ object DittoManager {
         // legs hit ID scans (all app joins key on `_id`), so no join indexes
         // are needed — only these per-store/order lookup paths.
         for (statement in listOf(
+            // Legacy index from the denormalized shape (order_items carried
+            // store_id pre-5.1-joins); drop it on upgraded devices.
+            "DROP INDEX IF EXISTS zava_order_items_store ON order_items",
             "CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)",
             "CREATE INDEX IF NOT EXISTS zava_orders_store ON orders (store_id, deleted)",
             "CREATE INDEX IF NOT EXISTS zava_order_items_order ON order_items (order_id)",

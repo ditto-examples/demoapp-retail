@@ -132,8 +132,8 @@ class OrdersState {
         const val baseFrom = joinedFrom
 
         /// Search input cleanup: trim whitespace and drop leading '#' characters —
-        /// the list renders order numbers as "#20250115_0001" but the stored id is
-        /// "order_20250115_0001". '%' and '_' are left alone: they're ILIKE
+        /// the list renders order numbers as "#197663" but the stored id is
+        /// "order_197663". '%' and '_' are left alone: they're ILIKE
         /// wildcards (the info sheet says so), and '_' matches real order ids.
         fun sanitizedSearchTerm(raw: String): String =
             raw.trim().dropWhile { it == '#' }
@@ -466,6 +466,7 @@ fun OrderDetailScreen(order: OrderSummaryRow, appState: AppState, modifier: Modi
     val colors = DittoColors.current
     var items by remember { mutableStateOf<List<OrderLineRow>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var loaded by remember { mutableStateOf(false) }
 
     // The store display name lives on the synced `stores` catalog (shared),
     // not on the order document — look it up instead of joining.
@@ -480,6 +481,7 @@ fun OrderDetailScreen(order: OrderSummaryRow, appState: AppState, modifier: Modi
                 OrderDetailQueries.itemsQuery,
                 mapOf("orderId" to order.order_id),
             )
+            loaded = true
         } catch (e: kotlinx.coroutines.CancellationException) {
             // View torn down mid-fetch — not an error state.
         } catch (e: Exception) {
@@ -545,7 +547,12 @@ fun OrderDetailScreen(order: OrderSummaryRow, appState: AppState, modifier: Modi
                     }
                 }
                 if (items.isEmpty()) {
-                    androidx.compose.material3.CircularProgressIndicator()
+                    if (loaded && error == null) {
+                        // Fetch resolved with no rows (unsynced/none).
+                        Text("No line items", color = colors.foregroundSubtle)
+                    } else if (error == null) {
+                        androidx.compose.material3.CircularProgressIndicator()
+                    }
                 }
                 error?.let { DittoBadge(it, DittoBadgeStatus.Critical) }
             }

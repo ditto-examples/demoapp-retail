@@ -198,10 +198,28 @@ private fun AppRoot(appState: AppState) {
                         val stores by appState.stores.collectAsStateWithLifecycle()
                         when {
                             selectedStoreId != null -> MainTabs(appState)
-                            // Explicit "Switch store", or the catalog hasn't
-                            // synced yet (the picker's empty state doubles as
-                            // the "waiting for sync / seed Big Peer" hint).
-                            showPicker || stores.isEmpty() -> StorePickerScreen(appState)
+                            // Explicit "Switch store".
+                            showPicker -> StorePickerScreen(appState)
+                            // First launch, catalog still syncing: wait here
+                            // instead of flashing a picker the user must never
+                            // complete manually (PLAN §4.1). Same hint the
+                            // picker's empty state used to double as.
+                            stores.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    CircularProgressIndicator()
+                                    Text("Waiting for the store catalog to sync…", color = colors.foregroundSubtle)
+                                    Text(
+                                        "No data yet? Run scripts/load_data.py to seed Big Peer.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.foregroundSubtle,
+                                        modifier = Modifier.padding(horizontal = 24.dp),
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                            }
                             // First launch: the catalog synced and the
                             // loader-flagged smallest store is being selected
                             // automatically — no picker step (PLAN §4.1).

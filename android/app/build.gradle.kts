@@ -54,7 +54,7 @@ android {
         buildConfig = true
     }
 
-    // The 72-query benchmark catalog for the Query Runner tab — bundled like
+    // The 96-query benchmark catalog for the Query Runner tab — bundled like
     // the Swift app bundles shared/benchmarks.json. (Module-relative:
     // android/app → repo root is ../../.)
     sourceSets {

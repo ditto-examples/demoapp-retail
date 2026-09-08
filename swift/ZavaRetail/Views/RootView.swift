@@ -32,11 +32,24 @@ struct RootView: View {
             case .ready:
                 if appState.selectedStoreId != nil {
                     MainTabView()
-                } else if appState.showStorePicker || appState.stores.isEmpty {
-                    // Explicit "Switch store", or the catalog hasn't synced
-                    // yet (the picker's empty state doubles as the
-                    // "waiting for sync / seed Big Peer" hint).
+                } else if appState.showStorePicker {
+                    // Explicit "Switch store".
                     StorePickerView()
+                } else if appState.stores.isEmpty {
+                    // First launch, catalog still syncing: wait here instead
+                    // of flashing a picker the user must never complete
+                    // manually (PLAN §4.1). Same hint the picker's empty
+                    // state used to double as.
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Waiting for the store catalog to sync…")
+                            .foregroundStyle(colors.foregroundSubtle)
+                        Text("No data yet? Run scripts/load_data.py to seed Big Peer.")
+                            .font(.callout)
+                            .foregroundStyle(colors.foregroundSubtle)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
                 } else {
                     // First launch: the catalog synced and the loader-flagged
                     // smallest store is being selected automatically — no

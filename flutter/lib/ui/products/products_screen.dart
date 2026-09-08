@@ -11,7 +11,7 @@ import '../../state/app_state.dart';
 import '../components.dart';
 import '../formatters.dart';
 
-/// Products catalog: paged live observers over the shared catalog (400 docs),
+/// Products catalog: paged live observers over the shared catalog (424 docs),
 /// joined in-memory with this store's inventory (per-store subscription) for
 /// stock badges. Low-stock mode pages the inventory collection directly. The
 /// composite-_id teaching moment lives in the detail view's location lookup.
@@ -97,7 +97,7 @@ AND (sku = :term OR product_name ILIKE :like) ORDER BY product_name LIMIT 50''';
         Category.fromJson,
         onChange: (list) => setState(() => _categories = list..sort((a, b) => a.category_name.compareTo(b.category_name))),
       ));
-      // The full catalog (400 docs) stays resident: id → name lookups.
+      // The full catalog (424 docs) stays resident: id → name lookups.
       _observers.add(manager.observe<Product>(
         'SELECT * FROM products WHERE deleted = false',
         Product.fromJson,

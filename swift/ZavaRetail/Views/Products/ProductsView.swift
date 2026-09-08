@@ -3,7 +3,7 @@ import DittoSwift
 import OSLog
 import SwiftUI
 
-/// Products catalog: paged live observers over the shared catalog (400 docs),
+/// Products catalog: paged live observers over the shared catalog (424 docs),
 /// joined in-memory with this store's inventory (per-store subscription) for
 /// stock badges. Low-stock mode pages the inventory collection directly. The
 /// composite-_id teaching moment lives in the detail view's location lookup.
@@ -71,7 +71,7 @@ final class ProductsState {
             }
             registered.append(categories)
             try Task.checkCancellation()
-            // The full catalog (400 docs) stays resident: id → name lookups
+            // The full catalog (424 docs) stays resident: id → name lookups
             // for inventory rows and the low-stock view.
             let productsAll = try await DittoManager.shared.observe(
                 "SELECT * FROM products WHERE deleted = false", as: Product.self

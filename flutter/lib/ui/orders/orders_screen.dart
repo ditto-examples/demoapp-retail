@@ -74,8 +74,8 @@ ORDER BY o.order_date DESC, o._id DESC LIMIT 50''';
   Timer? _searchDebounce;
 
   /// Search input cleanup: trim whitespace and drop leading '#' characters —
-  /// the list renders order numbers as "#20250115_0001" but the stored id is
-  /// "order_20250115_0001". '%' and '_' pass through as ILIKE wildcards.
+  /// the list renders order numbers as "#197663" but the stored id is
+  /// "order_197663". '%' and '_' pass through as ILIKE wildcards.
   static String sanitizedSearchTerm(String raw) {
     final trimmed = raw.trim();
     return trimmed.replaceFirst(RegExp('^#+'), '');
@@ -408,6 +408,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
 
   var _items = <OrderLineRow>[];
   String? _error;
+  var _loaded = false;
 
   @override
   void initState() {
@@ -422,7 +423,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
         OrderLineRow.fromJson,
         arguments: {'orderId': widget.order.order_id},
       );
-      if (mounted) setState(() => _items = items);
+      if (mounted) setState(() { _items = items; _loaded = true; });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -485,7 +486,12 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
                       ),
                     ]),
                   ),
-                if (_items.isEmpty && _error == null) const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator()),
+                if (_items.isEmpty && _error == null)
+                  if (_loaded)
+                    // Fetch resolved with no rows (unsynced/none).
+                    Padding(padding: const EdgeInsets.only(top: 8), child: Text('No line items', style: TextStyle(color: colors.foregroundSubtle)))
+                  else
+                    const Padding(padding: EdgeInsets.only(top: 8), child: CircularProgressIndicator()),
                 if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: DittoBadge(_error!, status: BadgeStatus.critical)),
               ],
             ),

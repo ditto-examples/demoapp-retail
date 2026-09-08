@@ -156,8 +156,10 @@ struct QueryDetailView: View {
                                     \(result.iterations) timed iterations, execution only (no rendering). \
                                     The benchmark harness uses pilot + warmup + 50 iterations; \
                                     this screen keeps it simple. The expected count comes from the \
-                                    suite's full-dataset oracle — on a sliced load (--size below 100k) \
-                                    smaller counts are correct, not a bug.
+                                    suite's full-dataset oracle. Only the ten MS-anchored entries \
+                                    carry counts restated for THIS dataset (catalog_overrides.py); \
+                                    every other count is the suite's own number — title-row query \
+                                    text is ground truth, counts are orientation.
                                     """)
                                     .font(.caption)
                                     .foregroundStyle(colors.foregroundSubtle)

@@ -29,9 +29,9 @@ enum DashboardQueries {
     ORDER BY stock_level LIMIT 5
     """
     /// The full customer directory is an unfiltered subscription — this count
-    /// is the shared directory every device holds (25K docs).
+    /// is the shared directory every device holds (50K docs).
     static let customersCount = "SELECT COUNT(*) AS count FROM customers WHERE deleted = false"
-    /// The shared catalog (400 products, unfiltered subscription).
+    /// The shared catalog (424 products, unfiltered subscription).
     static let productsCount = "SELECT COUNT(*) AS count FROM products WHERE deleted = false"
     /// Top products by revenue for the selected store. order_items has no
     /// store_id in the normalized schema — the store filter applies to the
@@ -48,7 +48,7 @@ enum DashboardQueries {
         """
     }
 
-    /// The whole catalog is small (400 docs) — observed live so aggregate rows
+    /// The whole catalog is small (424 docs) — observed live so aggregate rows
     /// (product_id only) can display product names.
     static let productsCatalog = "SELECT * FROM products WHERE deleted = false"
 }
@@ -664,11 +664,11 @@ private enum Explanations {
     """
     static let customersCount = """
     Counts the customer documents synced to this device. The app subscribes to \
-    ALL customers unfiltered — a walk-in could be anyone, so the whole 25K-row \
+    ALL customers unfiltered — a walk-in could be anyone, so the whole 50K-row \
     directory lives on device.
     """
     static let productsCount = """
-    Counts the shared product catalog synced to this device (400 docs). The \
+    Counts the shared product catalog synced to this device (424 docs). The \
     catalog is subscribed unfiltered: a rep can sell anything, from any store.
     """
     static let monthlyTrend = """

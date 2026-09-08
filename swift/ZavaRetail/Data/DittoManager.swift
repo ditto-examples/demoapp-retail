@@ -191,6 +191,11 @@ actor DittoManager {
     /// hit ID scans (all app joins key on `_id`), so no join indexes are
     /// needed — only these per-store/order lookup paths.
     private func createSupportingIndexes(on ditto: Ditto) async throws {
+        // Legacy index from the denormalized shape (order_items carried
+        // store_id pre-5.1-joins); drop it on upgraded devices.
+        try await ditto.store.execute(
+            query: "DROP INDEX IF EXISTS zava_order_items_store ON order_items"
+        ).dematerializeItems()
         try await ditto.store.execute(
             query: "CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)"
         ).dematerializeItems()
@@ -429,7 +434,7 @@ actor DittoManager {
 
     /// Registers a store observer: results are decoded on the serial delivery
     /// queue (cursors dematerialized immediately), then latest-wins coalesced
-    /// at 100 ms before hopping to the main actor — so a 25K-row customers
+    /// at 100 ms before hopping to the main actor — so a 50K-row customers
     /// sync storm can't make full decodes queue up behind each other.
     ///
     /// - Parameter onDecodeError: schema drift surfaces here instead of as a

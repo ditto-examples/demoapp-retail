@@ -2,7 +2,7 @@ import Anvil
 import DittoSwift
 import SwiftUI
 
-/// The full 25K-row customer directory, synced unfiltered
+/// The full 50K-row customer directory, synced unfiltered
 /// (a walk-in could be anyone), PAGED with
 /// LIMIT/OFFSET so the demo handles the full directory gracefully. "This store
 /// only" filters inside the query (primary_store_id), not in memory. The

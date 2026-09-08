@@ -74,15 +74,29 @@ class _AppRootState extends ConsumerState<AppRoot> {
               BootPhase.failed => _FailedScreen(boot.failureMessage ?? 'unknown error', onRetry: () => ref.read(appStateProvider.notifier).retryBoot()),
               BootPhase.ready => selectedStoreId != null
                   ? const MainTabs()
-                  : (showPicker || stores.isEmpty)
-                      // Explicit "Switch store", or the catalog hasn't synced
-                      // yet (the picker's empty state doubles as the
-                      // "waiting for sync / seed Big Peer" hint).
+                  : showPicker
+                      // Explicit "Switch store".
                       ? const StorePickerScreen()
-                      // First launch: the catalog synced and the
-                      // loader-flagged smallest store is being selected
-                      // automatically — no picker step (PLAN §4.1).
-                      : Center(
+                      : stores.isEmpty
+                          // First launch, catalog still syncing: wait here
+                          // instead of flashing a picker the user must never
+                          // complete manually (PLAN §4.1). Same hint the
+                          // picker's empty state used to double as.
+                          ? Center(
+                              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                const CircularProgressIndicator(),
+                                const SizedBox(height: 12),
+                                Text('Waiting for the store catalog to sync…', style: TextStyle(color: colors.foregroundSubtle)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                                  child: Text('No data yet? Run scripts/load_data.py to seed Big Peer.', style: TextStyle(color: colors.foregroundSubtle), textAlign: TextAlign.center),
+                                ),
+                              ]),
+                            )
+                          // First launch: the catalog synced and the
+                          // loader-flagged smallest store is being selected
+                          // automatically — no picker step (PLAN §4.1).
+                          : Center(
                           child: Column(mainAxisSize: MainAxisSize.min, children: [
                             const CircularProgressIndicator(key: Key('autoSelect.store')),
                             const SizedBox(height: 12),

@@ -62,8 +62,8 @@ final class OrdersState {
         "WHERE o.store_id = :storeId AND o.deleted = false"
 
     /// Search input cleanup: trim whitespace and drop leading '#' characters —
-    /// the list renders order numbers as "#20250115_0001" but the stored id is
-    /// "order_20250115_0001". '%' and '_' are left alone: they're ILIKE
+    /// the list renders order numbers as "#197663" but the stored id is
+    /// "order_197663". '%' and '_' are left alone: they're ILIKE
     /// wildcards (the info sheet says so), and '_' matches real order ids.
     nonisolated static func sanitizedSearchTerm(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
@@ -448,6 +448,7 @@ struct OrderDetailView: View {
     @Environment(\.dittoColors) private var colors
     @State private var items: [OrderLineRow] = []
     @State private var error: String?
+    @State private var loaded = false
 
     static let itemsQuery = """
     SELECT oi._id, oi.order_id, oi.product_id, oi.quantity, oi.unit_price, \
@@ -511,7 +512,14 @@ struct OrderDetailView: View {
                             }
                         }
                         if items.isEmpty {
-                            ProgressView()
+                            if loaded && error == nil {
+                                // The fetch resolved with no rows (an order
+                                // whose line items never synced or has none).
+                                Text("No line items")
+                                    .foregroundStyle(colors.foregroundSubtle)
+                            } else if error == nil {
+                                ProgressView()
+                            }
                         }
                         if let error {
                             AnvilBadge(error, status: .critical)
@@ -530,6 +538,7 @@ struct OrderDetailView: View {
                     arguments: ["orderId": order.order_id],
                     as: OrderLineRow.self
                 )
+                loaded = true
             } catch is CancellationError {
                 // View torn down mid-fetch — not an error state.
             } catch {

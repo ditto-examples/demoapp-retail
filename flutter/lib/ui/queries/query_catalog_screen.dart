@@ -214,7 +214,7 @@ class _BenchmarkDetailScreenState extends ConsumerState<BenchmarkDetailScreen> {
                       _resultRow('Min / Max', '${_result!.stats.minMs.toStringAsFixed(2)} / ${_result!.stats.maxMs.toStringAsFixed(2)} ms'),
                       const SizedBox(height: 8),
                       Text(
-                        '${_result!.iterations} timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple. The expected count comes from the suite\'s full-dataset oracle — on a sliced load (--size below 100k) smaller counts are correct, not a bug.',
+                        '${_result!.iterations} timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple. The expected count comes from the suite\'s full-dataset oracle. Only the ten MS-anchored entries carry counts restated for THIS dataset (catalog_overrides.py); every other count is the suite\'s own number — title-row query text is ground truth, counts are orientation.',
                         style: TextStyle(fontSize: 12, color: colors.foregroundSubtle),
                       ),
                     ],

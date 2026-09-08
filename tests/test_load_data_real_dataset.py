@@ -148,10 +148,15 @@ class PatchedCatalog(unittest.TestCase):
         self.assertEqual(len(self.catalog), 96)
 
     def test_no_stale_benchmark_literals(self):
+        # Scope: the fields the apps EXECUTE (DQL) or run on-device. The
+        # upstream sql_equivalent keeps the suite's own PG literals by design
+        # (catalog_overrides deliberately leaves it untouched — see its
+        # docstring on integer-typed columns in MS's restored schema).
         stale = ("order_20221209_0001", "e652232a-95ab-4fcf-86b7-e40cea3d749d",
                  "d30977d3-fa5d-4e13-9175-f637bccc4c87", "HND-0042")
         for name, entry in self.catalog.items():
-            blob = json.dumps(entry)
+            blob = json.dumps({k: entry.get(k)
+                               for k in ("query", "preQueries", "postQueries")})
             for lit in stale:
                 self.assertNotIn(lit, blob, f"{name} still references {lit}")
 
@@ -162,6 +167,7 @@ class PatchedCatalog(unittest.TestCase):
             "orders__join__store_info_projection": (ANCHOR_ORDER, 1),
             "items__join__orders": (ANCHOR_ORDER, ANCHOR_ORDER_ITEMS),
             "items__join__products": (ANCHOR_ORDER, ANCHOR_ORDER_ITEMS),
+            "order_items__select__by_order_indexed": (ANCHOR_ORDER, ANCHOR_ORDER_ITEMS),
             "customers__select__by_id": (ANCHOR_CUSTOMER, 1),
             "customer__join__orders": (ANCHOR_JOIN_CUSTOMER, ANCHOR_JOIN_CUSTOMER_ORDERS),
             "customer__join__orders_unfiltered": (ANCHOR_JOIN_CUSTOMER, ANCHOR_JOIN_CUSTOMER_ORDERS),

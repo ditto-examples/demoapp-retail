@@ -10,8 +10,9 @@ POST {DITTO_HTTP_API_URL}/api/v5/store/execute (Bearer DITTO_API_KEY).
 
 There is no size ladder: we load all of Microsoft's data (~666K docs). The
 mobile apps only pull a per-store slice over sync (per-store orders +
-inventory subscriptions; the shared catalog and the chain-wide order_items
-ledger). The store with the fewest orders (flagged in
+inventory + order_items subscriptions — items carry a denormalized store_id
+because sync subscriptions reject JOINs — plus the shared catalog and
+customers). The store with the fewest orders (flagged in
 shared/data/manifest.json) is stamped "demo_default": true on its store doc —
 the apps auto-select it on first launch instead of showing the picker.
 

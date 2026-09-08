@@ -157,11 +157,11 @@ object DittoManager {
             instance.sync.registerSubscription("SELECT * FROM products"),
             // the whole directory — a walk-in could be anyone
             instance.sync.registerSubscription("SELECT * FROM customers WHERE deleted = false"),
-            // The chain-wide item ledger. Normalized order_items docs carry NO
-            // store_id (store reachability is a JOIN through orders), and sync
-            // subscriptions reject JOINs — so items sync unfiltered. Per-store
-            // filtering happens in the screen queries.
-            instance.sync.registerSubscription("SELECT * FROM order_items WHERE deleted = false"),
+            // order_items syncs PER-STORE (see applyStoreSelection): items
+            // carry a store_id denormalized from the parent order because
+            // sync subscriptions reject JOINs (and subqueries) — validated
+            // against ditto-core, where subscription DQL compiles with
+            // restrict_to_original_syntax.
         )
     }
 
@@ -173,9 +173,7 @@ object DittoManager {
         // legs hit ID scans (all app joins key on `_id`), so no join indexes
         // are needed — only these per-store/order lookup paths.
         for (statement in listOf(
-            // Legacy index from the denormalized shape (order_items carried
-            // store_id pre-5.1-joins); drop it on upgraded devices.
-            "DROP INDEX IF EXISTS zava_order_items_store ON order_items",
+            "CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id)",
             "CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)",
             "CREATE INDEX IF NOT EXISTS zava_orders_store ON orders (store_id, deleted)",
             "CREATE INDEX IF NOT EXISTS zava_order_items_order ON order_items (order_id)",
@@ -203,13 +201,12 @@ object DittoManager {
         storeSubscriptions.clear()
 
         // Local-only removal of the old store's slice (EVICT vs DELETE is a
-        // teaching moment). Only orders and inventory are per-store;
-        // order_items is a chain-wide subscription in the normalized schema
-        // (items have no store_id of their own — they reach a store through
-        // their parent order's store_id, via JOIN). Docs in flight can still
-        // land afterwards — hence the re-evict pass below.
+        // teaching moment). orders, inventory AND order_items are all
+        // per-store (items carry the store_id denormalized from their parent
+        // order — subscriptions can't JOIN). Docs in flight can still land
+        // afterwards — hence the re-evict pass below.
         try {
-            for (collection in listOf("orders", "inventory")) {
+            for (collection in listOf("orders", "inventory", "order_items")) {
                 instance.store.execute("EVICT FROM $collection WHERE store_id != :storeId", mapOf("storeId" to storeId)) { }
                 if (selectionEpoch != epoch) return // superseded mid-evict
             }
@@ -229,6 +226,10 @@ object DittoManager {
             "SELECT * FROM orders WHERE store_id = :storeId AND deleted = false",
             mapOf("storeId" to storeId),
         )
+        storeSubscriptions += instance.sync.registerSubscription(
+            "SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false",
+            mapOf("storeId" to storeId),
+        )
         currentStoreId = storeId
         scheduleReEvict(storeId, epoch)
     }
@@ -241,7 +242,7 @@ object DittoManager {
             delay(3_000)
             if (selectionEpoch != epoch) return@launch
             Log.i(TAG, "re-evict pass for $storeId")
-            for (collection in listOf("orders", "inventory")) {
+            for (collection in listOf("orders", "inventory", "order_items")) {
                 // Re-check the epoch after every suspension, same discipline
                 // as the primary switch path — a newer selection must not
                 // watch the old pass evict ITS freshly-syncing rows.

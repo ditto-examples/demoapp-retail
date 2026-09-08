@@ -20,11 +20,13 @@ answers.
 - **Fix verification**: a finding needs two independent confirmations before
   it's called fixed; "it compiles" is not verification.
 - **Subscriptions go through one funnel** per app (store selection →
-  register/cancel). The dataset is the normalized retail-joins shape: the
-  per-store subscriptions are `inventory`/`orders` by `:storeId`; the shared
-  tier adds the chain-wide `order_items` ledger (sync subscriptions reject
-  JOINs and items carry no store_id, so per-store item filtering is JOIN
-  queries in the screens, Ditto SDK 5.1+).
+  register/cancel). The dataset is the normalized retail-joins shape with one
+  deliberate denormalization: sync subscriptions reject JOINs **and
+  subqueries** (validated 2026-09-08 in ditto-core + on-device), so
+  `order_items.store_id` is denormalized from the parent order and the
+  per-store subscriptions are `inventory`/`orders`/`order_items` by
+  `:storeId` (the shared tier is catalog + customers). Per-store JOIN
+  filtering in screens stays as the canonical teaching shape.
 - **Data bundle is committed**: `shared/data/*.ndjson.gz` (~17 MB, no LFS) —
   regenerate with `scripts/prepare_data.py` (needs the restored MS backup,
   `scripts/restore_ms_backup.sh`); never hand-edit.
@@ -63,10 +65,10 @@ the transform flags every non-cosmetic derivation in
 60/26/10/4 spread — MS has no status), order totals (`subtotal`/`item_count`
 aggregated from the real line items; `total = 1.095 × subtotal`), store
 `location` (real WA geography per named store, fabricated address), inventory
-`location`/`last_counted` (deterministic fabrication). Ids become slugs
-(`store_seattle`, `customer_40000`, `order_197663`…); `order_items.store_id`
-is dropped (per-store reachability is the apps' headline JOIN through
-orders).
+`location`/`last_counted` (deterministic fabrication); `order_items.store_id`
+is joined back from the parent order (denormalized on purpose — per-store
+item sync/evict needs the key on the item row). Ids become slugs
+(`store_seattle`, `customer_40000`, `order_197663`…).
 
 The bundled catalog stays the 96-query `retail-joins` suite, EXCEPT that
 `shared/catalog_overrides.json` + `scripts/sync_benchmarks.sh` point the four

@@ -5,8 +5,11 @@ Demo apps running on **Microsoft's actual shipped Zava DIY dataset**
 [ai-tour-26-zava-diy-dataset-plus-mcp](https://github.com/microsoft/ai-tour-26-zava-diy-dataset-plus-mcp)
 repo), transformed into the **normalized, JOIN-shaped** document form (Ditto
 SDK 5.1+) of the `retail-joins` benchmark catalog: orders carry no embedded
-customer/store names, order items carry no store/product copies, and every
-cross-collection display query is a DQL `INNER JOIN` running on-device.
+customer/store names, order items carry no product copies, and every
+cross-collection display query is a DQL `INNER JOIN` running on-device. The
+one deliberate denormalization: `order_items.store_id`, because sync
+subscriptions reject JOINs (and subqueries) — validated in the Ditto core —
+so per-store item sync needs the store key on the item row.
 
 The data: 8 stores, 9 categories, 89 product types, 424 products with real
 Microsoft catalog names and SKUs ("Professional Claw Hammer 16oz" /
@@ -51,9 +54,9 @@ Four apps, one shared blueprint — see [PLAN.md](PLAN.md) for the full design:
    the first sync is quick even though Big Peer holds everything). Switching
    stores is in the Dashboard header menu or Ditto tab → Switch store. The
    device subscribes to the shared catalog
-   (stores/categories/product_types/products/customers/order_items) plus that
-   store's orders and inventory; per-store item filtering happens through
-   JOINs because sync subscriptions can't join.
+   (stores/categories/product_types/products/customers) plus that store's
+   orders, inventory and order items (`WHERE store_id = :storeId` — items
+   carry a denormalized store_id because sync subscriptions can't join).
 
 ## Repo layout
 
@@ -88,8 +91,9 @@ swift/ android/ flutter/ rn-expo/
   (MS's store set: Seattle, Bellevue, Tacoma, Spokane, Everett, Redmond,
   Kirkland, Online), `customer_40000`, `order_197663`, `prod_1`,
   `ptype_hammers_1`, `cat_hand_tools`. Category `seasonal_multipliers` come
-  from Microsoft's own `product_data.json`. `order_items.store_id` is dropped
-  — items reach a store through their order (the apps' headline JOIN).
+  from Microsoft's own `product_data.json`. `order_items.store_id` is joined
+  back from the parent order — denormalized on purpose, so per-store item
+  sync/evict can filter on the item row itself.
 - **Catalog literals**: the suite's literal queries referenced the benchmark's
   own generated rows; `scripts/sync_benchmarks.sh` applies
   `shared/catalog_overrides.json`, pointing them at real Microsoft rows

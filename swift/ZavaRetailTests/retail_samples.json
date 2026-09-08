@@ -94,11 +94,12 @@
   "total": 1713.42,
   "deleted": false
  },
- "order_item": {
-  "_id": "item_414233",
-  "order_item_id": "item_414233",
-  "order_id": "order_197663",
-  "product_id": "prod_64",
+    "order_item": {
+        "_id": "item_414233",
+        "order_item_id": "item_414233",
+        "order_id": "order_197663",
+        "store_id": "store_seattle",
+        "product_id": "prod_64",
   "quantity": 2,
   "unit_price": 387.99,
   "discount_percent": 0,

@@ -58,9 +58,9 @@ Eight collections (full load — no size slicing):
 | Shared catalog | `product_types` | 89 | unfiltered (categories ← product_types ← products) |
 | Shared catalog | `products` | 424 | unfiltered; **real Microsoft names/SKUs/prices/descriptions** (`HTHM001600` = "Professional Claw Hammer 16oz") |
 | Shared catalog | `customers` | 50,000 | unfiltered (walk-ins could be anyone) |
-| Shared ledger | `order_items` | 414,241 | **unfiltered** — normalized items carry no `store_id` (they reach a store through the parent order) and sync subscriptions reject JOINs, so items sync chain-wide |
 | Per-store | `inventory` | 3,392 | `WHERE _id.store_id = '<store>'` (composite `_id: {store_id, product_id}`) |
 | Per-store | `orders` | 197,665 | `WHERE store_id = '<store>' AND deleted = false` |
+| Per-store | `order_items` | 414,241 | `WHERE store_id = '<store>' AND deleted = false` — `store_id` denormalized from the parent order (**amends the 2026-08-29 "chain-wide ledger" lock, 2026-09-08**: sync subscriptions reject JOINs *and* subqueries — validated in ditto-core, where subscription DQL compiles with `restrict_to_original_syntax` — so per-store item sync needs the key on the item row) |
 
 Per-store order counts: Kirkland 2,975 · Redmond 5,047 · Everett 6,492 ·
 Spokane 9,831 · Tacoma 26,064 · Bellevue 36,666 · Seattle 54,995 · Online
@@ -71,9 +71,13 @@ Vancouver.)
 Schema notes the apps should surface as teaching moments:
 
 - **No denormalized display fields** — `orders` has no `customer_name` /
-  `store_name`, `order_items` has no `store_id`/`sku`/`product_name`. The
-  screens get display names through `INNER JOIN`s (`orders ⨝ customers`,
-  `order_items ⨝ products`, `order_items ⨝ orders` for the store filter).
+  `store_name`, `order_items` has no `sku`/`product_name`. The screens get
+  display names through `INNER JOIN`s (`orders ⨝ customers`,
+  `order_items ⨝ products`, `order_items ⨝ orders`). The one deliberate
+  exception: `order_items.store_id` is denormalized from the parent order so
+  per-store sync subscriptions (which reject JOINs) can filter items; where a
+  screen still rides the items⨝orders JOIN it does so to demonstrate the
+  suite's canonical shape, not out of necessity.
 - Composite `_id` on `inventory` (subfield queries + composite-key indexing).
 - MAP fields for CRDT-friendly independent updates (`categories.seasonal_multipliers`,
   `inventory.location` aisle/shelf/bin).
@@ -353,41 +357,46 @@ wipes (DELETE … LIMIT loops); `--dry-run` shows the plan offline.
    unflagged catalogs (old loads): first physical store by name. Runs once
    per launch; selection is persisted (UserDefaults / SharedPreferences /
    `shared_preferences` / AsyncStorage).
-4. Register subscriptions — sync subscriptions **cannot JOIN** (parser
-   rejects them, and the normalized order_items carry no `store_id`), so the
-   per-store tier is only inventory + orders, and the chain-wide item ledger
-   joins the shared tier. DQL strings stay visible at the call site
-   (teaching-first, no query-builder wrappers):
+4. Register subscriptions — sync subscriptions **cannot JOIN** (rejected at
+   registration: ditto-core compiles subscription DQL with
+   `restrict_to_original_syntax`; subqueries don't even parse). Since the
+   filter key must live on the synced row itself, `order_items` carries a
+   `store_id` denormalized from its parent order and joins the per-store
+   tier. DQL strings stay visible at the call site (teaching-first, no
+   query-builder wrappers):
 
 ```sql
--- shared catalog + chain-wide ledger (registered once)
+-- shared catalog (registered once)
 SELECT * FROM stores
 SELECT * FROM categories
 SELECT * FROM product_types
 SELECT * FROM products
 SELECT * FROM customers   WHERE deleted = false
-SELECT * FROM order_items WHERE deleted = false
 
 -- per-store (re-registered when the store changes)
-SELECT * FROM inventory WHERE _id.store_id = :storeId AND deleted = false
-SELECT * FROM orders    WHERE store_id = :storeId AND deleted = false
+SELECT * FROM inventory   WHERE _id.store_id = :storeId AND deleted = false
+SELECT * FROM orders      WHERE store_id = :storeId AND deleted = false
+SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false
 ```
 
 5. Create the supporting indexes under **app-namespaced names** (`zava_*`) at
    startup — the mflix convention: `zava_inventory_store ON inventory
    (_id.store_id)` (composite-`_id` subfield queries need an explicit index),
-   `zava_orders_store ON orders (store_id, deleted)`, `zava_order_items_order
-   ON order_items (order_id)` (order-detail lookup path). JOIN inner legs need
+   `zava_orders_store ON orders (store_id, deleted)`, `zava_order_items_store
+   ON order_items (store_id)` (per-store item subscription path),
+   `zava_order_items_order ON order_items (order_id)` (order-detail lookup
+   path). JOIN inner legs need
    no indexes — every app join probes `_id`, which is an ID scan. App index
    names are disjoint from the benchmark's names so the Query Runner's
    `DROP INDEX` postQueries can never drop the app's own indexes.
 6. `sync.start()`.
 
-**Store switch flow** (a showcase interaction): cancel the two per-store
-subscriptions → `EVICT … WHERE store_id != :newStore` on `orders` and
-`inventory` **only** (local-only removal — the EVICT vs DELETE distinction is
-a teaching moment; order_items is chain-wide, there is no per-store item
-slice to evict) → register subscriptions for the new store → sync status UI
+**Store switch flow** (a showcase interaction): cancel the three per-store
+subscriptions → `EVICT … WHERE store_id != :newStore` on `orders`,
+`inventory` and `order_items` (local-only removal — the EVICT vs DELETE
+distinction is a teaching moment; items are per-store-evictable thanks to the
+denormalized `store_id`) → register subscriptions for the new store → sync
+status UI
 shows the new slice arriving. Two documented caveats the screen must
 respect (review m8): Ditto's sync guidance warns against changing
 subscriptions more often than ~every 15 minutes (interrupts in-flight
@@ -592,14 +601,16 @@ reference, not redesigns.
   the development token the apps use. Both live in the gitignored root `.env`.
   API keys expire after max one year; `.env.template` says so, so a demo
   doesn't mysteriously 401 next year.
-- **Cold-start sync cost**: with the full Microsoft dataset loaded, a
-  Kirkland (default, smallest) device syncs the shared catalog + 2,975-store
-  orders while the chain-wide `order_items` ledger (414,241 docs —
-  subscriptions can't JOIN) dominates sync volume. A Seattle device pulls
-  54,995 orders on top. Defaulting first launch to the smallest-order store
-  (`demo_default`) keeps that cheapest. That's the demo's headline moment
-  (watch `system:data_sync_info` fill in) — but it also means first-run UX
-  must show sync progress honestly rather than a spinner.
+- **Cold-start sync cost**: with the full Microsoft dataset loaded and items
+  syncing per-store, a Kirkland (default, smallest) device syncs the shared
+  catalog + 2,975 orders + 6,223 items; Seattle, the heaviest, pulls 54,995
+  orders + 115,247 items (per-store item counts computed from the bundle —
+  the chain-wide 414K-item ledger was the original design, amended
+  2026-09-08 because it dominated sync volume). Defaulting first launch to
+  the smallest-order store (`demo_default`) keeps the first sync cheapest.
+  That's the demo's headline moment (watch `system:data_sync_info` fill in) —
+  but it also means first-run UX must show sync progress honestly rather than
+  a spinner.
 - **Query runner mutations**: mitigated by design (§4.2.6) — per-run UUID
   suffixes on synthetic `_id`s + `DELETE` substituted for the cleanup `EVICT`
   on synced runs + confirm gate. Without this, EVICT-only cleanup would leave

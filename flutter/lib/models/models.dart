@@ -4,8 +4,11 @@ import 'dart:math';
 /// field names match the collection fields exactly, so the document → model
 /// mapping stays visible — these apps teach the SDK, not hide it). The schema
 /// is NORMALIZED (Ditto SDK 5.1+ JOINs): orders carry no customer/store
-/// display fields, order_items carry no store_id/sku/product_name —
-/// cross-collection display goes through INNER JOIN queries at the call sites.
+/// display fields, order_items carry no sku/product_name — cross-collection
+/// display goes through INNER JOIN queries at the call sites. (order_items
+/// DOES carry store_id, denormalized from the parent order: sync
+/// subscriptions reject JOINs, so per-store item sync needs the field on the
+/// item itself.)
 /// Required fields throw loudly on null/missing (matching the Swift/Kotlin
 /// decode contract); optional fields default to null.
 
@@ -269,6 +272,7 @@ class OrderItem {
     required this.id,
     this.order_item_id,
     required this.order_id,
+    required this.store_id,
     required this.product_id,
     required this.quantity,
     required this.unit_price,
@@ -280,6 +284,10 @@ class OrderItem {
   final String id;
   final String? order_item_id;
   final String order_id;
+
+  /// Denormalized from the parent order (subscriptions can't JOIN, so
+  /// per-store item sync filters on this).
+  final String store_id;
   final String product_id;
   final int quantity;
   final double unit_price;
@@ -291,6 +299,7 @@ class OrderItem {
         id: j['_id'] as String,
         order_item_id: j['order_item_id'] as String?,
         order_id: j['order_id'] as String,
+        store_id: j['store_id'] as String,
         product_id: j['product_id'] as String,
         quantity: (j['quantity'] as num).toInt(),
         unit_price: (j['unit_price'] as num).toDouble(),

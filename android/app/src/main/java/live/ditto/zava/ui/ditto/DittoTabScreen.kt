@@ -135,7 +135,7 @@ private fun DittoRow(title: String, onClick: () -> Unit) {
 }
 
 private const val dittoTabExplanation =
-    "System & tools for the synced store. Query Runner browses and times the 96-query retail-JOINs benchmark catalog against the live synced store (JOINs run on-device, SDK 5.1+). Sync status and Indexes are live views over Ditto's system:data_sync_info and system:indexes virtual collections (the query above). Ditto tools is the official diagnostic viewer. Switch store shows the picker: picking a new store cancels the per-store subscriptions and EVICTs its local orders/inventory (EVICT is local-only — the difference from DELETE is a teaching moment); the chain-wide order-items ledger has no per-store slice to evict (normalized schema)."
+    "System & tools for the synced store. Query Runner browses and times the 96-query retail-JOINs benchmark catalog against the live synced store (JOINs run on-device, SDK 5.1+). Sync status and Indexes are live views over Ditto's system:data_sync_info and system:indexes virtual collections (the query above). Ditto tools is the official diagnostic viewer. Switch store shows the picker: picking a new store cancels the per-store subscriptions and EVICTs its local orders/inventory/order items (EVICT is local-only — the difference from DELETE is a teaching moment); items are evictable per store because store_id is denormalized onto each one (sync subscriptions reject JOINs, so the item's own row carries the filter key)."
 
 // MARK: - Sync status (system:data_sync_info)
 

@@ -29,8 +29,11 @@ fun JsonObject.toPlainMap(): Map<String, Any?> = mapValues { it.value.toPlain() 
 // property names match the collection fields exactly, so the document → model
 // mapping stays visible — these apps teach the SDK, not hide it). The schema
 // is NORMALIZED (Ditto SDK 5.1+ JOINs): orders carry no customer/store display
-// fields, order_items carry no store_id/sku/product_name — cross-collection
-// display goes through INNER JOIN queries at the call sites. All models are
+// fields, order_items carry no sku/product_name — cross-collection display
+// goes through INNER JOIN queries at the call sites. (order_items DOES carry
+// store_id, denormalized from the parent order: sync subscriptions reject
+// JOINs, so per-store item sync needs the field on the item itself.) All
+// models are
 // immutable value types: they cross from Ditto observer callbacks to the
 // main-thread UI state. Nullable fields default to null so documents missing
 // the key decode identically to the Swift models (explicit nulls are treated
@@ -164,6 +167,9 @@ data class OrderItem(
     val _id: String,
     val order_item_id: String? = null,
     val order_id: String,
+    /** Denormalized from the parent order (subscriptions can't JOIN, so
+     *  per-store item sync filters on this). */
+    val store_id: String,
     val product_id: String,
     val quantity: Int,
     val unit_price: Double,

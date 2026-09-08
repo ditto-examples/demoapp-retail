@@ -96,8 +96,10 @@ final class ZavaRetailLogicTests: XCTestCase {
         let item = try sample("order_item", as: OrderItem.self)
         XCTAssertEqual(item.quantity, 2)
         XCTAssertEqual(item.line_total, 775.98, accuracy: 0.001)
+        XCTAssertEqual(item.store_id, "store_seattle", "store_id is denormalized from the parent order")
         let raw = try XCTUnwrap(rawSample("order_item") as? [String: Any])
-        for field in ["store_id", "sku", "product_name"] {
+        XCTAssertNotNil(raw["store_id"], "order_item docs must carry the denormalized store_id")
+        for field in ["sku", "product_name"] {
             XCTAssertNil(raw[field], "order_item docs must stay normalized (no \(field))")
         }
     }

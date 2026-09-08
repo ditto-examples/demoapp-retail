@@ -21,8 +21,13 @@ shape our Ditto apps and the retail-joins benchmark catalog run against
                   4% cancelled (Microsoft's dataset has no status column)
                   stores.location — real WA city/state/zip per named store
                   inventory.location (aisle/shelf/bin) + last_counted
-  dropped         order_items.store_id (denormalized copy — per-store item
-                  reachability is the apps' headline JOIN through orders)
+  re-denormalized order_items.store_id — joined from the parent retail.orders
+                  row. Sync subscriptions reject JOINs (validated against
+                  ditto core: ditto-sync-docs compiles subscription DQL with
+                  restrict_to_original_syntax, resolver requires SELECT * on a
+                  single collection FROM), so per-store item sync needs the
+                  field on the item. Screens still JOIN items ⨝ products for
+                  display (SKU/name live on the product).
   kept real       products.sku / product_name / prices / description,
                   categories seasonal multipliers (from Microsoft's own
                   product_data.json), customers, quantities, discounts…
@@ -276,23 +281,26 @@ def transform(source: PsqlSource, ms_catalog: dict):
         }
 
     for r in source.query_json(
-            "SELECT row_to_json(i) FROM (SELECT order_item_id, order_id, product_id, quantity, "
-            "unit_price::float8 AS unit_price, discount_percent, "
-            "discount_amount::float8 AS discount_amount, total_amount::float8 AS line_total "
-            "FROM retail.order_items ORDER BY order_item_id) i"):
+            "SELECT row_to_json(i) FROM ("
+            "  SELECT i.order_item_id, i.order_id, o.store_id, i.product_id, i.quantity, "
+            "  i.unit_price::float8 AS unit_price, i.discount_percent, "
+            "  i.discount_amount::float8 AS discount_amount, i.total_amount::float8 AS line_total "
+            "  FROM retail.order_items i JOIN retail.orders o ON i.order_id = o.order_id "
+            "  ORDER BY i.order_item_id) i"):
         iid = f"item_{r['order_item_id']}"
         yield "order_items", {
             "_id": iid, "order_item_id": iid,
             "order_id": f"order_{r['order_id']}",
+            # Denormalized back ON PURPOSE from the parent order: sync
+            # subscriptions reject JOINs, so per-store item sync needs the
+            # field on the item itself (`WHERE store_id = :storeId`).
+            "store_id": store_ids[r["store_id"]],
             "product_id": f"prod_{r['product_id']}",
             "quantity": r["quantity"], "unit_price": round(r["unit_price"], 2),
             "discount_percent": r["discount_percent"],
             "discount_amount": round(r["discount_amount"], 2),
             "line_total": round(r["line_total"], 2),
             "deleted": False,
-            # NOTE: no store_id — intentional. Items reach a store through
-            # their parent order (the headline JOIN); the normalized catalog's
-            # per-store story depends on it.
         }
 
 
@@ -351,6 +359,8 @@ def main() -> int:
             "orders.subtotal/item_count": "aggregated from real line items",
             "stores.location": "real WA city/state/zip per named store (MS has no column)",
             "inventory.location/last_counted": "deterministic fabrication (MS has no columns)",
+            "order_items.store_id": "denormalized from the parent retail.orders row "
+                "(subscriptions reject JOINs — per-store item sync needs it on the item)",
         },
     }
     total = 0

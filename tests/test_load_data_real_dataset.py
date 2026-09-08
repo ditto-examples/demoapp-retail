@@ -98,8 +98,17 @@ class MsDataBundle(unittest.TestCase):
         for field in ("customer_name", "customer_email", "store_name"):
             self.assertNotIn(field, order)
         item = next(d for d in read_collection("order_items"))
-        for field in ("store_id", "sku", "product_name"):
+        # sku/product_name still live only on products (display JOIN).
+        for field in ("sku", "product_name"):
             self.assertNotIn(field, item)
+        # store_id IS present — denormalized on purpose: sync subscriptions
+        # reject JOINs, so per-store item sync filters on the item's own row.
+        self.assertIn("store_id", item)
+
+    def test_item_store_id_matches_parent_order(self):
+        order_store = {o["_id"]: o["store_id"] for o in read_collection("orders")}
+        for i in read_collection("order_items"):
+            self.assertEqual(i["store_id"], order_store[i["order_id"]], i["_id"])
 
     def test_derived_totals_math(self):
         # For the anchor order the aggregate is exact and cheap to verify.

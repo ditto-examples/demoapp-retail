@@ -40,10 +40,12 @@ ORDER BY stock_level LIMIT 5''';
   /// The shared catalog (424 products, unfiltered subscription).
   static const productsCount = 'SELECT COUNT(*) AS count FROM products WHERE deleted = false';
 
-  /// Top products by revenue for the selected store. order_items has no
-  /// store_id in the normalized schema — the store filter applies to the
-  /// parent order through an INNER JOIN (the suite's canonical "items via
-  /// orders" shape). LIMIT comes from the card's pull-down (5/10/25/50/100).
+  /// Top products by revenue for the selected store. order_items carries a
+  /// store_id denormalized from the parent order, but the store filter still
+  /// rides the INNER JOIN — the suite's canonical "items via orders" shape
+  /// (a direct oi.store_id = :storeId filter would also work; that's what
+  /// the item subscription uses). LIMIT comes from the card's pull-down
+  /// (5/10/25/50/100).
   /// DQL GROUP BY projects only group keys + aggregates, so product names
   /// resolve client-side against the synced catalog.
   static String topProducts(int limit) => '''
@@ -63,8 +65,8 @@ class _Explanations {
   static const productsCount = 'Counts the shared product catalog synced to this device (424 docs). The catalog is subscribed unfiltered: a rep can sell anything, from any store.';
   static const monthlyTrend = "Groups this store's orders into calendar months with substr(order_date, 0, 7) (DQL's substr is zero-based — a classic gotcha) and shows the latest 12. One of the heavier aggregation queries in the benchmark.";
   static const lowStock = 'Counts and lists inventory rows at your store with fewer than 5 units left. The store filter rides the composite _id.store_id subfield (_id.store_id) — the benchmark\'s index-backed "low stock alert" query.';
-  static const topProducts = "Sums line totals per product across this store's order items and takes the top N by revenue (the pull-down sets N). Items carry no store of their own in the normalized schema — the store filter rides an INNER JOIN to the parent order. The GROUP BY projects product_id only, so names resolve against the synced catalog. This card is a live observer: values climb as sync delivers the store.";
-  static const screen = 'Every card is a LIVE store observer, not a one-shot fetch — after a store switch the values climb as the new store syncs, and ghost cards cover the gap so you never see another store\'s rows. The KPI cards aggregate orders by status (COUNT + SUM, above with your store substituted); the trend groups orders into months with substr(order_date, 0, 7) (DQL\'s substr is zero-based); low stock rides the composite _id.store_id subfield; top products sums line totals per product with the store filter applied through an INNER JOIN to the parent order (normalized order_items carry no store of their own). Each card\'s own ⓘ shows the exact query behind it.';
+  static const topProducts = "Sums line totals per product across this store's order items and takes the top N by revenue (the pull-down sets N). Items carry store_id denormalized from the parent order (subscriptions can't JOIN — that's how item sync stays per-store); this card still filters through the INNER JOIN to demonstrate the suite's canonical \"items via orders\" shape. The GROUP BY projects product_id only, so names resolve against the synced catalog. This card is a live observer: values climb as sync delivers the store.";
+  static const screen = 'Every card is a LIVE store observer, not a one-shot fetch — after a store switch the values climb as the new store syncs, and ghost cards cover the gap so you never see another store\'s rows. The KPI cards aggregate orders by status (COUNT + SUM, above with your store substituted); the trend groups orders into months with substr(order_date, 0, 7) (DQL\'s substr is zero-based); low stock rides the composite _id.store_id subfield; top products sums line totals per product with the store filter applied through an INNER JOIN to the parent order (items do carry a denormalized store_id — the JOIN demonstrates the suite\'s canonical shape; the item subscription filters on the item\'s own field). Each card\'s own ⓘ shows the exact query behind it.';
 }
 
 /// The dashboard is LIVE: every card is a store observer, not a one-shot

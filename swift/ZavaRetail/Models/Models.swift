@@ -4,8 +4,10 @@ import Foundation
 // property names match the collection fields exactly, so the document → model
 // mapping stays visible — these apps teach the SDK, not hide it). The schema
 // is NORMALIZED (Ditto SDK 5.1+ JOINs): orders carry no customer/store display
-// fields, order_items carry no store_id/sku/product_name — cross-collection
-// display goes through INNER JOIN queries at the call sites.
+// fields, order_items carry no sku/product_name — cross-collection display
+// goes through INNER JOIN queries at the call sites. (order_items DOES carry
+// store_id, denormalized from the parent order: sync subscriptions reject
+// JOINs, so per-store item sync needs the field on the item itself.)
 // All models are immutable Sendable value types: they cross from the
 // DittoManager actor / observer delivery queues to @MainActor UI state.
 
@@ -141,6 +143,9 @@ struct OrderItem: Sendable, Codable, Identifiable, Equatable {
     let _id: String
     let order_item_id: String?
     let order_id: String
+    /// Denormalized from the parent order (subscriptions can't JOIN, so
+    /// per-store item sync filters on this).
+    let store_id: String
     let product_id: String
     let quantity: Int
     let unit_price: Double

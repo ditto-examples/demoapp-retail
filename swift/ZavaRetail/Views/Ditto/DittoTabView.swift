@@ -52,9 +52,9 @@ struct DittoTabView: View {
                     Text("""
                     Shows the store picker. The current store keeps syncing until you pick \
                     a new one — picking it cancels its per-store subscriptions and evicts \
-                    its local orders/inventory (EVICT — local only). The chain-wide \
-                    order-items ledger has no per-store slice to evict (normalized schema; \
-                    items carry no store_id of their own).
+                    its local orders/inventory/order items (EVICT — local only). Items are \
+                    per-store because store_id is denormalized onto each one: sync \
+                    subscriptions reject JOINs, so the item's own row carries the filter key.
                     """)
                 }
             }

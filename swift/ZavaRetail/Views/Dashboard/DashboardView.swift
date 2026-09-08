@@ -33,10 +33,12 @@ enum DashboardQueries {
     static let customersCount = "SELECT COUNT(*) AS count FROM customers WHERE deleted = false"
     /// The shared catalog (424 products, unfiltered subscription).
     static let productsCount = "SELECT COUNT(*) AS count FROM products WHERE deleted = false"
-    /// Top products by revenue for the selected store. order_items has no
-    /// store_id in the normalized schema — the store filter applies to the
-    /// parent order through an INNER JOIN (the suite's canonical "items via
-    /// orders" shape). LIMIT comes from the card's pull-down (5/10/25/50/100).
+    /// Top products by revenue for the selected store. order_items carries a
+    /// store_id denormalized from the parent order, but the store filter still
+    /// rides the INNER JOIN — the suite's canonical "items via orders" shape
+    /// (a direct oi.store_id = :storeId filter would also work; that's what
+    /// the item subscription uses). LIMIT comes from the card's pull-down
+    /// (5/10/25/50/100).
     /// DQL GROUP BY projects only group keys + aggregates, so product names
     /// resolve client-side against the synced catalog.
     static func topProducts(limit: Int) -> String {
@@ -683,11 +685,12 @@ private enum Explanations {
     """
     static let topProducts = """
     Sums line totals per product across this store's order items and takes the \
-    top N by revenue (the pull-down sets N). Items carry no store of their own \
-    in the normalized schema — the store filter rides an INNER JOIN to the \
-    parent order. The GROUP BY projects product_id only, so names resolve \
-    against the synced catalog. This card is a live observer: values climb as \
-    sync delivers the store.
+    top N by revenue (the pull-down sets N). Items carry store_id denormalized \
+    from the parent order (subscriptions can't JOIN — that's how item sync \
+    stays per-store); this card still filters through the INNER JOIN to \
+    demonstrate the suite's canonical "items via orders" shape. The GROUP BY \
+    projects product_id only, so names resolve against the synced catalog. \
+    This card is a live observer: values climb as sync delivers the store.
     """
 }
 

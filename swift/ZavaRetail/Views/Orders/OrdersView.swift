@@ -440,8 +440,8 @@ private struct OrderRow: View {
 /// Order detail = the order row (already joined to its customer by the list)
 /// plus its line items through a second INNER JOIN (order_items ⨝ products) —
 /// product names/SKUs live only on the products collection in the normalized
-/// schema. Ditto SDK 5.1 runs both joins on-device; sync subscriptions still
-/// can't JOIN, which is why items sync chain-wide.
+/// schema. Ditto SDK 5.1 runs both joins on-device; sync subscriptions can't
+/// JOIN, which is why items carry a denormalized store_id and sync per-store.
 struct OrderDetailView: View {
     let order: OrderSummaryRow
     @Environment(AppState.self) private var appState

@@ -101,8 +101,9 @@ final class TabTourUITests: XCTestCase {
         // --- Orders: LIKE search narrows the list by partial order number ---
         app.tabBars.buttons["Orders"].tap()
         let ordersTable = app.collectionViews.firstMatch
-        // Kirkland pulls 2,975 orders under a chain-wide 414K-item ledger:
-        // first sync to the full Microsoft dataset takes minutes on a cold
+        // Kirkland pulls 2,975 orders + its own 6,223 order items (items
+        // sync per-store via the denormalized store_id): first sync to the
+        // full Microsoft dataset takes minutes on a cold
         // app container; the table waits generously (warm boots pass fast).
         XCTAssertTrue(ordersTable.waitForExistence(timeout: 600))
         let firstOrderCell = ordersTable.cells.firstMatch
@@ -126,8 +127,8 @@ final class TabTourUITests: XCTestCase {
     }
 
     /// Dashboard low-stock card: badge and the designed empty state must
-    /// render. Microsoft's real shelf counts are healthy (min 28 units
-    /// chain-wide), so "critical SKUs" is honestly the empty state here — the
+    /// render. Microsoft's real shelf counts are healthy (no store has fewer
+    /// than 5 units), so "critical SKUs" is honestly the empty state here — the
     /// assertion proves the card renders its data-driven state, not a blank.
     private func assertLowStockCard(app: XCUIApplication) {
         let lowStockBadge = app.staticTexts.matching(

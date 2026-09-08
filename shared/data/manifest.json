@@ -38,7 +38,7 @@
     },
     "order_items": {
       "docs": 414241,
-      "sha256_gz": "98757ff489983df1c52aca68a34fab65c27346e7d34f13f4345f274aae186fb9",
+      "sha256_gz": "a3d439d7b2c5f99acb3856ede8f77a87104e1d6bdea16c25799f43e9b10f8e5d",
       "file": "order_items.ndjson.gz"
     }
   },
@@ -64,6 +64,7 @@
     "orders.total": "round(subtotal * 1.095, 2) \u2014 derived tax",
     "orders.subtotal/item_count": "aggregated from real line items",
     "stores.location": "real WA city/state/zip per named store (MS has no column)",
-    "inventory.location/last_counted": "deterministic fabrication (MS has no columns)"
+    "inventory.location/last_counted": "deterministic fabrication (MS has no columns)",
+    "order_items.store_id": "denormalized from the parent retail.orders row (subscriptions reject JOINs \u2014 per-store item sync needs it on the item)"
   }
 }

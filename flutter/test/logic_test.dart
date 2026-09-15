@@ -98,6 +98,27 @@ void main() {
       expect(cleanup, "DELETE FROM inventory WHERE _id = {'store_id': 'store_seattle', 'product_id': 'bench-r2-prod'}");
     });
 
+    test('EVICT cleanup handles bulk order_id predicate', () {
+      // The joins catalog's bulk EVICT predicates on order_id, not _id
+      // (order_items__evict__bulk_by_order) — cleanup must still derive.
+      final e = entry(
+        "EVICT FROM order_items WHERE order_id = 'bench-bulk-evict'",
+        category: 'EVICT',
+      );
+      final cleanup = QueryPreparation.evictCleanup(e, (t) => t.replaceAll('bench-', 'bench-r9-'));
+      expect(cleanup, "DELETE FROM order_items WHERE order_id = 'bench-r9-bulk-evict'");
+    });
+
+    test('UPSERT is mutating and decodes expected_count', () {
+      final e = BenchmarkEntry.fromJson(const <String, dynamic>{
+        'query': "INSERT INTO orders DOCUMENTS(deserialize_json('{\"_id\":\"bench-order-ups\"}')) ON ID CONFLICT DO UPDATE",
+        'category': 'UPSERT',
+        'expected_count': 1,
+      });
+      expect(e.isMutating, isTrue, reason: 'UPSERT writes bench docs — it needs the confirm gate + id suffixing');
+      expect(e.expected_count, 1);
+    });
+
     test('EVICT cleanup ignores non-EVICT', () {
       expect(QueryPreparation.evictCleanup(entry('SELECT * FROM stores'), (t) => t), isNull);
     });
@@ -200,13 +221,14 @@ void main() {
   });
 
   group('BenchmarkCatalog (real bundled file)', () {
-    test('loads and groups the 72 entries', () {
+    test('loads and groups the 96 entries', () {
       final file = File('../shared/benchmarks.json');
       expect(file.existsSync(), isTrue, reason: 'benchmarks.json must be reachable from the test working dir');
       final catalog = BenchmarkCatalog.parse(file.readAsStringSync());
-      expect(catalog.entries.length, 72);
+      expect(catalog.entries.length, 96);
       final collections = catalog.groups.map((g) => g.collection).toList();
-      expect(collections, containsAll(['orders', 'subscription', 'order_items']));
+      expect(collections, containsAll(['orders', 'order_items', 'joins']),
+          reason: "the retail-joins catalog's JOIN groups must ship in the bundle");
       expect(collections, orderedEquals(collections.toList()..sort()));
     });
   });

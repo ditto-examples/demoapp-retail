@@ -153,9 +153,15 @@ object DittoManager {
             // shared catalog (registered once)
             instance.sync.registerSubscription("SELECT * FROM stores"),
             instance.sync.registerSubscription("SELECT * FROM categories"),
+            instance.sync.registerSubscription("SELECT * FROM product_types"),
             instance.sync.registerSubscription("SELECT * FROM products"),
-            // subscription__customers_all — the whole directory (a walk-in could be anyone)
+            // the whole directory — a walk-in could be anyone
             instance.sync.registerSubscription("SELECT * FROM customers WHERE deleted = false"),
+            // order_items syncs PER-STORE (see applyStoreSelection): items
+            // carry a store_id denormalized from the parent order because
+            // sync subscriptions reject JOINs (and subqueries) — validated
+            // against ditto-core, where subscription DQL compiles with
+            // restrict_to_original_syntax.
         )
     }
 
@@ -163,11 +169,14 @@ object DittoManager {
         // App-namespaced zava_* names so the Query Runner's benchmark
         // postQueries (DROP INDEX on benchmark-named indexes) can never drop
         // the app's own indexes (PLAN §4.1). The lambda form of execute scopes
-        // the result's cursor lifetime to the block (SDK-managed).
+        // the result's cursor lifetime to the block (SDK-managed). JOIN inner
+        // legs hit ID scans (all app joins key on `_id`), so no join indexes
+        // are needed — only these per-store/order lookup paths.
         for (statement in listOf(
+            "CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id)",
             "CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)",
             "CREATE INDEX IF NOT EXISTS zava_orders_store ON orders (store_id, deleted)",
-            "CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id, deleted)",
+            "CREATE INDEX IF NOT EXISTS zava_order_items_order ON order_items (order_id)",
         )) {
             instance.store.execute(statement, emptyMap()) { }
         }
@@ -192,10 +201,12 @@ object DittoManager {
         storeSubscriptions.clear()
 
         // Local-only removal of the old store's slice (EVICT vs DELETE is a
-        // teaching moment). Docs in flight can still land afterwards — hence
-        // the re-evict pass below.
+        // teaching moment). orders, inventory AND order_items are all
+        // per-store (items carry the store_id denormalized from their parent
+        // order — subscriptions can't JOIN). Docs in flight can still land
+        // afterwards — hence the re-evict pass below.
         try {
-            for (collection in listOf("order_items", "orders", "inventory")) {
+            for (collection in listOf("orders", "inventory", "order_items")) {
                 instance.store.execute("EVICT FROM $collection WHERE store_id != :storeId", mapOf("storeId" to storeId)) { }
                 if (selectionEpoch != epoch) return // superseded mid-evict
             }
@@ -205,7 +216,6 @@ object DittoManager {
         }
         if (selectionEpoch != epoch) return
 
-        // The benchmark's subscription__* queries verbatim, parameterized.
         // Append as registered: a mid-sequence throw leaves the earlier subs
         // tracked (the next switch's close loop owns them), never leaked.
         storeSubscriptions += instance.sync.registerSubscription(
@@ -232,7 +242,7 @@ object DittoManager {
             delay(3_000)
             if (selectionEpoch != epoch) return@launch
             Log.i(TAG, "re-evict pass for $storeId")
-            for (collection in listOf("order_items", "orders", "inventory")) {
+            for (collection in listOf("orders", "inventory", "order_items")) {
                 // Re-check the epoch after every suspension, same discipline
                 // as the primary switch path — a newer selection must not
                 // watch the old pass evict ITS freshly-syncing rows.

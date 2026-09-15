@@ -25,6 +25,7 @@
 		62901884AEA00B67219A4B1D /* ibm_plex_mono_italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2385DC6B2FC798F491DFED5C /* ibm_plex_mono_italic.ttf */; };
 		64FD0455927E98442284DC74 /* BenchmarkCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B7FE7877166899FCAE16A6 /* BenchmarkCatalog.swift */; };
 		659E824038669D2F0B09C239 /* QueryCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AC1D9015D767A0FC717CFA /* QueryCatalogView.swift */; };
+		68906ADFDBC9F00E54590D6F /* JoinObserverContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25FA6B2973E02804B69BA1A8 /* JoinObserverContractTests.swift */; };
 		7C592399AF1A109798630142 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 498333BED6C921D0DB9F264A /* AppState.swift */; };
 		811E8C78010B97729807D729 /* ZavaRetailLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */; };
 		90A45A71F962E23CFC843335 /* CustomersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85AE3C784E9463F9070A973A /* CustomersView.swift */; };
@@ -70,6 +71,7 @@
 		0769C5D5A846035657382E35 /* ZavaRetailUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ZavaRetailUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0F8BAEDDF31190D02B94F7A4 /* PaginationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaginationBar.swift; sourceTree = "<group>"; };
 		2385DC6B2FC798F491DFED5C /* ibm_plex_mono_italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = ibm_plex_mono_italic.ttf; sourceTree = "<group>"; };
+		25FA6B2973E02804B69BA1A8 /* JoinObserverContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JoinObserverContractTests.swift; sourceTree = "<group>"; };
 		26DF81F0DC4A5A1C49BCE2EA /* OrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrdersView.swift; sourceTree = "<group>"; };
 		31F5627A9F1C7138F3EF83EC /* QueryInfoButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueryInfoButton.swift; sourceTree = "<group>"; };
 		39810E047566FB365AB3A658 /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
@@ -79,7 +81,7 @@
 		4FB0FEAF351DB701CB06E30E /* DatabaseConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseConfig.swift; sourceTree = "<group>"; };
 		5457B247D96FD947351D99D6 /* retail_samples.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = retail_samples.json; sourceTree = "<group>"; };
 		5C9904CB102B5DEBCBBD8D7A /* ZavaRetailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZavaRetailTests.swift; sourceTree = "<group>"; };
-		5DA2DAD735B3100561CF647A /* ZavaRetail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZavaRetail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5DA2DAD735B3100561CF647A /* ZavaRetail.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ZavaRetail.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DB741FE22D22FF5FEF855D4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6B8E33F191CDC1707DEE9D18 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		72C7A095635AD11CB024B439 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
@@ -257,6 +259,7 @@
 		8DBE6BCA583CBE27B28EC5BC /* ZavaRetailTests */ = {
 			isa = PBXGroup;
 			children = (
+				25FA6B2973E02804B69BA1A8 /* JoinObserverContractTests.swift */,
 				ED2100067FCD63A1F994739F /* ModelContractTests.swift */,
 				5457B247D96FD947351D99D6 /* retail_samples.json */,
 				3DD5EBBA1C6E6C57DA23DC30 /* ZavaRetailLogicTests.swift */,
@@ -398,6 +401,7 @@
 						ProvisioningStyle = Automatic;
 					};
 					38BA8A217D84D16BC6CBE41E = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 					DB11FAE6F48EB56EB4363582 = {
@@ -551,6 +555,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				68906ADFDBC9F00E54590D6F /* JoinObserverContractTests.swift in Sources */,
 				92F85C758D7529F3E178C4BA /* ModelContractTests.swift in Sources */,
 				811E8C78010B97729807D729 /* ZavaRetailLogicTests.swift in Sources */,
 				617A5EA21E4373A7B059A9B1 /* ZavaRetailTests.swift in Sources */,
@@ -591,17 +596,13 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3T2VMFZPPQ;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ZavaRetail/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;
@@ -728,17 +729,13 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3T2VMFZPPQ;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ZavaRetail/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;

@@ -35,7 +35,7 @@ targets:
         buildPhase: resources
       - path: ../vendor/anvil/fonts/ibm_plex_mono_italic.ttf
         buildPhase: resources
-      # The 72-query benchmark catalog for the Query Runner tab.
+      # The 96-query benchmark catalog for the Query Runner tab.
       - path: ../shared/benchmarks.json
         buildPhase: resources
     dependencies:

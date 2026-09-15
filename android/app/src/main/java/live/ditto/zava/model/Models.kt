@@ -25,10 +25,16 @@ fun JsonElement.toPlain(): Any? = when (this) {
 
 fun JsonObject.toPlainMap(): Map<String, Any?> = mapValues { it.value.toPlain() }
 
-// Models mirror the retail benchmark's document shapes 1:1 (snake_case
+// Models mirror the retail-joins benchmark's document shapes 1:1 (snake_case
 // property names match the collection fields exactly, so the document → model
-// mapping stays visible — these apps teach the SDK, not hide it). All models
-// are immutable value types: they cross from Ditto observer callbacks to the
+// mapping stays visible — these apps teach the SDK, not hide it). The schema
+// is NORMALIZED (Ditto SDK 5.1+ JOINs): orders carry no customer/store display
+// fields, order_items carry no sku/product_name — cross-collection display
+// goes through INNER JOIN queries at the call sites. (order_items DOES carry
+// store_id, denormalized from the parent order: sync subscriptions reject
+// JOINs, so per-store item sync needs the field on the item itself.) All
+// models are
+// immutable value types: they cross from Ditto observer callbacks to the
 // main-thread UI state. Nullable fields default to null so documents missing
 // the key decode identically to the Swift models (explicit nulls are treated
 // as absent; a null/missing required field fails loudly).
@@ -42,6 +48,9 @@ data class Store(
     val is_online: Boolean,
     val location: Location,
     val deleted: Boolean,
+    /** Stamped by scripts/load_data.py on the store with the fewest orders in
+     * the loaded slice — the apps' first-launch default. */
+    val demo_default: Boolean? = null,
 ) {
     @Serializable
     data class Location(
@@ -66,12 +75,24 @@ data class Category(
 }
 
 @Serializable
+data class ProductType(
+    val _id: String,
+    val type_id: String,
+    val category_id: String,
+    val type_name: String,
+    val deleted: Boolean,
+) {
+    val id: String get() = _id
+}
+
+@Serializable
 data class Product(
     val _id: String,
     val product_id: String,
     val sku: String,
     val product_name: String,
     val category_id: String,
+    val type_id: String? = null,
     val cost: Double,
     val base_price: Double,
     val gross_margin_percent: Double,
@@ -132,9 +153,6 @@ data class Order(
     val customer_id: String,
     val store_id: String,
     val order_date: String,
-    val customer_name: String,
-    val customer_email: String? = null,
-    val store_name: String,
     val item_count: Int,
     val subtotal: Double,
     val total: Double,
@@ -147,16 +165,59 @@ data class Order(
 @Serializable
 data class OrderItem(
     val _id: String,
+    val order_item_id: String? = null,
     val order_id: String,
+    /** Denormalized from the parent order (subscriptions can't JOIN, so
+     *  per-store item sync filters on this). */
     val store_id: String,
     val product_id: String,
-    val sku: String,
-    val product_name: String,
     val quantity: Int,
     val unit_price: Double,
     val discount_percent: Double,
+    val discount_amount: Double? = null,
     val line_total: Double,
     val deleted: Boolean,
+) {
+    val id: String get() = _id
+}
+
+/** Row shape of the orders screen's INNER JOIN (orders ⨝ customers) — the
+ * normalized replacement for v5.0's denormalized orders.customer_name: the
+ * customer's display name comes from the join, not the order document. */
+@Serializable
+data class OrderSummaryRow(
+    val order_id: String,
+    val store_id: String,
+    val order_date: String,
+    val status: String,
+    val subtotal: Double,
+    val total: Double,
+    val item_count: Int,
+    val customer_id: String,
+    val first_name: String? = null,
+    val last_name: String? = null,
+) {
+    /** == the order doc's `_id` (order ids are `order_…` slugs) — NOT
+     *  deserialized: observer emissions on JOINs namespace `_id` per alias. */
+    val _id: String get() = order_id
+    val id: String get() = _id
+    val customerName: String get() = listOfNotNull(first_name, last_name).joinToString(" ")
+}
+
+/** Row shape of the order-detail JOIN (order_items ⨝ products) — the
+ * normalized replacement for denormalized order_items.product_name/sku. */
+@Serializable
+data class OrderLineRow(
+    val _id: String,
+    val order_id: String,
+    val product_id: String,
+    val quantity: Int,
+    val unit_price: Double,
+    val discount_percent: Double,
+    val discount_amount: Double? = null,
+    val line_total: Double,
+    val product_name: String? = null,
+    val sku: String? = null,
 ) {
     val id: String get() = _id
 }

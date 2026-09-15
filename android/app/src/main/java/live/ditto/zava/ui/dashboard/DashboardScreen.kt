@@ -70,9 +70,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/// Dashboard KPI queries — derived from the benchmark's AGGREGATION entries
-/// (orders__aggregation__sum_total_by_status, orders__aggregation__count_by_month,
-/// order_items__aggregation__top_products_by_revenue, inventory__select__low_stock_*).
+/// Dashboard KPI queries — derived from the retail-joins benchmark catalog's
+/// aggregation entries (joins__agg__*, inventory__select__low_stock_* shapes).
 /// Aliases are added so rows decode into typed models; the exact string that
 /// executes is always shown in the card's info sheet.
 object DashboardQueries {
@@ -96,23 +95,28 @@ object DashboardQueries {
         SELECT * FROM inventory WHERE stock_level < 5 AND _id.store_id = :storeId AND deleted = false
         ORDER BY stock_level LIMIT 5
     """
-    /// subscription__customers_all is unfiltered — this count is the shared
-    /// directory every device holds (25K docs).
+    /// The full customer directory is an unfiltered subscription — this count
+    /// is the shared directory every device holds (50K docs).
     const val customersCount = "SELECT COUNT(*) AS count FROM customers WHERE deleted = false"
-    /// The shared catalog (400 products, unfiltered subscription).
+    /// The shared catalog (424 products, unfiltered subscription).
     const val productsCount = "SELECT COUNT(*) AS count FROM products WHERE deleted = false"
 
-    /// Top products by revenue — verbatim order_items__aggregation__top_products_by_revenue
-    /// apart from the LIMIT the card's pull-down controls (5/10/25/50/100).
-    /// DQL v5.0 GROUP BY projects only group keys + aggregates, so product
-    /// names resolve client-side against the synced catalog.
+    /// Top products by revenue for the selected store. order_items carries a
+    /// store_id denormalized from the parent order, but the store filter still
+    /// rides the INNER JOIN — the suite's canonical "items via orders" shape
+    /// (a direct oi.store_id = :storeId filter would also work; that's what
+    /// the item subscription uses). LIMIT comes from the card's pull-down
+    /// (5/10/25/50/100).
+    /// DQL GROUP BY projects only group keys + aggregates, so product names
+    /// resolve client-side against the synced catalog.
     fun topProducts(limit: Int) = """
-        SELECT product_id, SUM(line_total) AS revenue
-        FROM order_items WHERE store_id = :storeId AND deleted = false
-        GROUP BY product_id ORDER BY revenue DESC LIMIT $limit
+        SELECT oi.product_id, SUM(oi.line_total) AS revenue
+        FROM order_items AS oi INNER JOIN orders AS o ON oi.order_id = o._id
+        WHERE o.store_id = :storeId AND o.deleted = false AND oi.deleted = false
+        GROUP BY oi.product_id ORDER BY revenue DESC LIMIT $limit
     """
 
-    /// The whole catalog is small (400 docs) — observed live so aggregate rows
+    /// The whole catalog is small (424 docs) — observed live so aggregate rows
     /// (product_id only) can display product names.
     const val productsCatalog = "SELECT * FROM products WHERE deleted = false"
 }
@@ -248,15 +252,15 @@ class DashboardState {
 }
 
 private const val dashboardScreenExplanation =
-    "Every card is a LIVE store observer, not a one-shot fetch — after a store switch the values climb as the new store syncs, and ghost cards cover the gap so you never see another store's rows. The KPI cards aggregate orders by status (COUNT + SUM, above with your store substituted); the trend groups orders into months with substr(order_date, 0, 7) (DQL's substr is zero-based); low stock rides the composite _id.store_id subfield; top products sums order_items line totals with product names resolved client-side (DQL v5.0 has no JOINs). Each card's own ⓘ shows the exact query behind it."
+    "Every card is a LIVE store observer, not a one-shot fetch — after a store switch the values climb as the new store syncs, and ghost cards cover the gap so you never see another store's rows. The KPI cards aggregate orders by status (COUNT + SUM, above with your store substituted); the trend groups orders into months with substr(order_date, 0, 7) (DQL's substr is zero-based); low stock rides the composite _id.store_id subfield; top products sums line totals per product with the store filter applied through an INNER JOIN to the parent order (items do carry a denormalized store_id — the JOIN demonstrates the suite's canonical shape; the item subscription filters on the item's own field). Each card's own ⓘ shows the exact query behind it."
 
 private object Explanations {
     const val statusRevenue = "Counts this store's non-deleted orders and sums their totals, grouped by status. It's the benchmark's by-status aggregation scoped to your store — the same DQL shape the performance suite measures."
-    const val customersCount = "Counts the customer documents synced to this device. The app subscribes to ALL customers unfiltered (subscription__customers_all) — a walk-in could be anyone, so the whole 25K-row directory lives on device."
-    const val productsCount = "Counts the shared product catalog synced to this device (400 docs). The catalog is subscribed unfiltered: a rep can sell anything, from any store."
+    const val customersCount = "Counts the customer documents synced to this device. The app subscribes to ALL customers unfiltered — a walk-in could be anyone, so the whole 50K-row directory lives on device."
+    const val productsCount = "Counts the shared product catalog synced to this device (424 docs). The catalog is subscribed unfiltered: a rep can sell anything, from any store."
     const val monthlyTrend = "Groups this store's orders into calendar months with substr(order_date, 0, 7) (DQL's substr is zero-based — a classic gotcha) and shows the latest 12. One of the heavier aggregation queries in the benchmark."
     const val lowStock = "Counts and lists inventory rows at your store with fewer than 5 units left. The store filter rides the composite _id subfield (_id.store_id) — the benchmark's index-backed \"low stock alert\" query."
-    const val topProducts = "Sums line totals per product across this store's order items and takes the top N by revenue (the pull-down sets N). DQL v5.0 has no JOINs, so the query projects product_id only and names resolve against the synced catalog. This card is a live observer: values climb as sync delivers the store."
+    const val topProducts = "Sums line totals per product across this store's order items and takes the top N by revenue (the pull-down sets N). Items carry store_id denormalized from the parent order (subscriptions can't JOIN — that's how item sync stays per-store); this card still filters through the INNER JOIN to demonstrate the suite's canonical \"items via orders\" shape. The GROUP BY projects product_id only, so names resolve against the synced catalog. This card is a live observer: values climb as sync delivers the store."
 }
 
 @Composable

@@ -61,12 +61,12 @@ import live.ditto.zava.ui.formatted
 import java.util.Locale
 import java.util.UUID
 
-private fun categoryStatus(category: String): DittoBadgeStatus = when (category) {
-    "SELECT" -> DittoBadgeStatus.Info
-    "INDEX_SELECT" -> DittoBadgeStatus.Promo
-    "AGGREGATION" -> DittoBadgeStatus.Success
-    "INSERT" -> DittoBadgeStatus.Warning
-    "UPDATE", "DELETE", "EVICT" -> DittoBadgeStatus.Critical
+private fun categoryStatus(category: String): DittoBadgeStatus = when {
+    category == "SELECT" || category == "GUARD" -> DittoBadgeStatus.Info
+    category == "INDEX_SELECT" -> DittoBadgeStatus.Promo
+    category == "AGGREGATION" || category.startsWith("JOIN_") -> DittoBadgeStatus.Success
+    category == "INSERT" || category == "UPSERT" -> DittoBadgeStatus.Warning
+    category == "UPDATE" || category == "DELETE" || category == "EVICT" -> DittoBadgeStatus.Critical
     else -> DittoBadgeStatus.Info
 }
 
@@ -302,12 +302,15 @@ fun BenchmarkDetailScreen(name: String, appState: AppState, modifier: Modifier =
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         result?.let { r ->
                             ResultRow("Result count", "${r.resultCount.formatted()} rows")
+                            currentEntry.expected_count?.let { expected ->
+                                ResultRow("Expected on full dataset", "${expected.formatted()} rows")
+                            }
                             ResultRow("Mean", "%.2f ms".format(Locale.US, r.stats.meanMs))
                             ResultRow("Median", "%.2f ms".format(Locale.US, r.stats.medianMs))
                             ResultRow("p95", "%.2f ms".format(Locale.US, r.stats.p95Ms))
                             ResultRow("Min / Max", "%.2f / %.2f ms".format(Locale.US, r.stats.minMs, r.stats.maxMs))
                             Text(
-                                "${r.iterations} timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple.",
+                                "${r.iterations} timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple. The expected count comes from the suite's full-dataset oracle. Only the ten MS-anchored entries carry counts restated for THIS dataset (catalog_overrides.py); every other count is the suite's own number — title-row query text is ground truth, counts are orientation.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.foregroundSubtle,
                             )

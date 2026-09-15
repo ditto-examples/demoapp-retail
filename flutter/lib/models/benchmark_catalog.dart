@@ -3,14 +3,16 @@ import 'dart:math';
 
 import 'models.dart';
 
-/// Bundled shared/benchmarks.json (symlinked into assets/) — the 72-query
-/// retail benchmark catalog. Key = benchmark name (`collection__descriptor`).
+/// Bundled shared/benchmarks.json (symlinked into assets/) — the 96-query
+/// retail-JOINs DQL benchmark catalog. Key = benchmark name
+/// (`collection__descriptor`).
 class BenchmarkEntry {
   const BenchmarkEntry({
     required this.query,
     required this.category,
     this.preQueries,
     this.postQueries,
+    this.expected_count,
   });
 
   final String query;
@@ -18,13 +20,19 @@ class BenchmarkEntry {
   final List<String>? preQueries;
   final List<String>? postQueries;
 
-  bool get isMutating => const {'INSERT', 'UPDATE', 'DELETE', 'EVICT'}.contains(category);
+  /// The harness's oracle count for this query on the full dataset —
+  /// displayed next to the device's result count in the runner (sliced
+  /// datasets legitimately differ; the runner copy says so).
+  final int? expected_count;
+
+  bool get isMutating => const {'INSERT', 'UPDATE', 'DELETE', 'EVICT', 'UPSERT'}.contains(category);
 
   factory BenchmarkEntry.fromJson(Map<String, dynamic> j) => BenchmarkEntry(
         query: j['query'] as String,
         category: j['category'] as String,
         preQueries: (j['preQueries'] as List<dynamic>?)?.cast<String>(),
         postQueries: (j['postQueries'] as List<dynamic>?)?.cast<String>(),
+        expected_count: (j['expected_count'] as num?)?.toInt(),
       );
 }
 
@@ -200,16 +208,18 @@ class QueryPreparation {
   }
 
   /// EVICT benchmarks carry no cleanup of their own; derive a propagating
-  /// DELETE from the EVICT's `_id = …` predicate (scalar or composite).
+  /// DELETE reusing the EVICT's whole WHERE clause — scalar/composite `_id`
+  /// targets and bulk `order_id = 'bench-…-bulk-…'` predicates alike.
   static String? evictCleanup(BenchmarkEntry entry, String Function(String) transform) {
     if (entry.category != 'EVICT') return null;
-    final idMatch = RegExp(r"_id\s*=\s*(\{[^}]+\}|'[^']+')").firstMatch(entry.query);
-    if (idMatch == null) return null;
+    final whereMatch = RegExp(r'\bWHERE\b', caseSensitive: false).firstMatch(entry.query);
+    if (whereMatch == null) return null;
     final collectionMatch = RegExp(r'EVICT\s+FROM\s+\w+', caseSensitive: false).firstMatch(entry.query);
     if (collectionMatch == null) return null;
     final collection = collectionMatch.group(0)!.replaceAll(RegExp(r'EVICT\s+FROM\s+', caseSensitive: false), '').trim();
     if (collection.isEmpty) return null;
-    final predicate = transform(idMatch.group(0)!);
+    final predicate = transform(entry.query.substring(whereMatch.end).trim());
+    if (predicate.isEmpty) return null;
     return 'DELETE FROM $collection WHERE $predicate';
   }
 }

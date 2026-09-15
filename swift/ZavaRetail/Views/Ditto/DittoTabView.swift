@@ -18,7 +18,7 @@ struct DittoTabView: View {
                         Label("Query Runner", systemImage: "gauge.with.dots.needle.67percent")
                     }
                 } footer: {
-                    Text("Browse and run the 72-query retail benchmark catalog against the synced store, with timing.")
+                    Text("Browse and run the 96-query retail-JOINs benchmark catalog against the synced store, with timing.")
                 }
 
                 Section {
@@ -50,9 +50,11 @@ struct DittoTabView: View {
                     }
                 } footer: {
                     Text("""
-                    Returns to the store picker. The current store keeps syncing until you pick \
-                    a new one — picking it cancels its subscriptions, evicts its local data \
-                    (EVICT — local only), and subscribes to the new store.
+                    Shows the store picker. The current store keeps syncing until you pick \
+                    a new one — picking it cancels its per-store subscriptions and evicts \
+                    its local orders/inventory/order items (EVICT — local only). Items are \
+                    per-store because store_id is denormalized onto each one: sync \
+                    subscriptions reject JOINs, so the item's own row carries the filter key.
                     """)
                 }
             }

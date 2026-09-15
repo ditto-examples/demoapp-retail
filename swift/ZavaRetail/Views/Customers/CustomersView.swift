@@ -2,11 +2,11 @@ import Anvil
 import DittoSwift
 import SwiftUI
 
-/// The full 25K-row customer directory, synced unfiltered
-/// (subscription__customers_all — a walk-in could be anyone), PAGED with
+/// The full 50K-row customer directory, synced unfiltered
+/// (a walk-in could be anyone), PAGED with
 /// LIMIT/OFFSET so the demo handles the full directory gracefully. "This store
-/// only" filters inside the query (customers__select__by_primary_store_id_*),
-/// not in memory. The search box runs one-shot point queries (debounced).
+/// only" filters inside the query (primary_store_id), not in memory. The
+/// search box runs one-shot point queries (debounced).
 @MainActor
 @Observable
 final class CustomersState {

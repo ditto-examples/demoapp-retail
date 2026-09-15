@@ -1,9 +1,11 @@
 import Anvil
 import SwiftUI
 
-/// The 72-query benchmark catalog shipped in the app bundle, browsable by
-/// collection. Every query is runnable against the live synced store with
-/// timing — this is how the app "shows off" the benchmark (PLAN §4.2.6).
+/// The 96-query retail-JOINs benchmark catalog shipped in the app bundle,
+/// browsable by collection. Every query is runnable against the live synced
+/// store with timing — this is how the app "shows off" the benchmark
+/// (PLAN §4.2.6). JOIN entries need Ditto SDK 5.1+ (small peer); the apps
+/// pin 5.1.x.
 struct QueryCatalogView: View {
     @Environment(\.dittoColors) private var colors
     @State private var catalog: BenchmarkCatalog?
@@ -62,10 +64,11 @@ struct CategoryBadge: View {
 
     private var status: AnvilBadge.Status {
         switch category {
-        case "SELECT": .info
+        case "SELECT", "GUARD": .info
         case "INDEX_SELECT": .promo
         case "AGGREGATION": .success
-        case "INSERT": .warning
+        case let c where c.hasPrefix("JOIN_"): .success
+        case "INSERT", "UPSERT": .warning
         case "UPDATE", "DELETE", "EVICT": .critical
         default: .info
         }
@@ -142,6 +145,9 @@ struct QueryDetailView: View {
                             if let result {
                                 VStack(alignment: .leading, spacing: 6) {
                                     resultRow("Result count", "\(result.resultCount.formatted()) rows")
+                                    if let expected = entry.expected_count {
+                                        resultRow("Expected on full dataset", "\(expected.formatted()) rows")
+                                    }
                                     resultRow("Mean", String(format: "%.2f ms", result.stats.meanMs))
                                     resultRow("Median", String(format: "%.2f ms", result.stats.medianMs))
                                     resultRow("p95", String(format: "%.2f ms", result.stats.p95Ms))
@@ -149,7 +155,11 @@ struct QueryDetailView: View {
                                     Text("""
                                     \(result.iterations) timed iterations, execution only (no rendering). \
                                     The benchmark harness uses pilot + warmup + 50 iterations; \
-                                    this screen keeps it simple.
+                                    this screen keeps it simple. The expected count comes from the \
+                                    suite's full-dataset oracle. Only the ten MS-anchored entries \
+                                    carry counts restated for THIS dataset (catalog_overrides.py); \
+                                    every other count is the suite's own number — title-row query \
+                                    text is ground truth, counts are orientation.
                                     """)
                                     .font(.caption)
                                     .foregroundStyle(colors.foregroundSubtle)

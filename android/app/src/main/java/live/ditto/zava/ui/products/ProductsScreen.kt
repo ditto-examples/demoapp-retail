@@ -60,7 +60,7 @@ import live.ditto.zava.ui.components.SectionHeader
 import live.ditto.zava.ui.components.SkeletonRows
 import live.ditto.zava.ui.components.ZavaSearchField
 
-/// Products catalog: paged live observers over the shared catalog (400 docs),
+/// Products catalog: paged live observers over the shared catalog (424 docs),
 /// joined in-memory with this store's inventory (per-store subscription) for
 /// stock badges. Low-stock mode pages the inventory collection directly. The
 /// composite-_id teaching moment lives in the detail view's location lookup.
@@ -127,7 +127,7 @@ class ProductsState {
             categoriesObserver = DittoManager.observe<Category>("SELECT * FROM categories") { list ->
                 categories = list.sortedBy { it.category_name }
             }
-            // The full catalog (400 docs) stays resident: id → name lookups
+            // The full catalog (424 docs) stays resident: id → name lookups
             // for inventory rows and the low-stock view.
             productsAllObserver = DittoManager.observe<Product>(
                 "SELECT * FROM products WHERE deleted = false"

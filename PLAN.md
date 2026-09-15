@@ -22,8 +22,8 @@ by queries taken from (or derived from) the 72-benchmark DQL catalog.
 
 Locked decisions (2026-08-29):
 
-- **Dataset sizing** — deterministic slices of the `full`-variant files so all
-  8 stores are populated at every size (1k/5k/10k/30k/100k orders).
+- **Dataset** — Microsoft's shipped Zava backup (all 665,828 docs), restored
+  and transformed by `scripts/prepare_data.py` (§1.1); no size slicing.
 - **Query showcase** — interactive in-app runner: the 72 benchmark queries ship
   bundled in each app, browsable and executable with timing.
 - **Reference platform** — SwiftUI first; its UX/screen patterns are then ported
@@ -40,39 +40,95 @@ Locked decisions (2026-08-29):
 
 ### 1.1 The dataset
 
-`/Users/labeaaa/Developer/dql-metrics-benchmark/benchmarks/retail`
-(origin: [microsoft/ai-tour-26-zava-diy-dataset-plus-mcp](https://github.com/microsoft/ai-tour-26-zava-diy-dataset-plus-mcp),
-document-modeled for Ditto).
+**Microsoft's shipped Zava DIY dataset**, transformed for Ditto: the
+`zava_retail_2025_07_21_postgres_rls.backup` from
+[microsoft/ai-tour-26-zava-diy-dataset-plus-mcp](https://github.com/microsoft/ai-tour-26-zava-diy-dataset-plus-mcp)
+(sibling checkout `../ai-tour-26-zava-diy-dataset-plus-mcp`), restored into a
+scratch Postgres via `scripts/restore_ms_backup.sh`, then rebuilt by
+`scripts/prepare_data.py` into the **normalized retail-joins document shape**
+(DQL JOINs, Ditto SDK 5.1+ — this supersedes both the old denormalized
+`retail/` suite and the earlier benchmark-generated bundle).
 
-Seven collections, two tiers:
+Eight collections (full load — no size slicing):
 
-| Tier | Collection | Docs (full variant) | Subscription |
+| Tier | Collection | Docs | Subscription |
 |---|---|---:|---|
-| Shared catalog | `stores` | 8 | unfiltered |
+| Shared catalog | `stores` | 8 | unfiltered (loader flags the smallest-order store `"demo_default": true` — **Kirkland**, 2,975 orders) |
 | Shared catalog | `categories` | 9 | unfiltered |
-| Shared catalog | `products` | 400 | unfiltered |
-| Shared catalog | `customers` | 25,000 | unfiltered (walk-ins could be anyone) |
-| Per-store | `inventory` | 3,167 | `WHERE _id.store_id = '<store>'` (composite `_id: {store_id, product_id}`) |
-| Per-store | `orders` | 100,000 | `WHERE store_id = '<store>' AND deleted = false` |
-| Per-store | `order_items` | 199,757 | `WHERE store_id = '<store>' AND deleted = false` (`store_id` denormalized because DQL has no JOINs in v5.0) |
+| Shared catalog | `product_types` | 89 | unfiltered (categories ← product_types ← products) |
+| Shared catalog | `products` | 424 | unfiltered; **real Microsoft names/SKUs/prices/descriptions** (`HTHM001600` = "Professional Claw Hammer 16oz") |
+| Shared catalog | `customers` | 50,000 | unfiltered (walk-ins could be anyone) |
+| Per-store | `inventory` | 3,392 | `WHERE _id.store_id = '<store>'` (composite `_id: {store_id, product_id}`) |
+| Per-store | `orders` | 197,665 | `WHERE store_id = '<store>' AND deleted = false` |
+| Per-store | `order_items` | 414,241 | `WHERE store_id = '<store>' AND deleted = false` — `store_id` denormalized from the parent order (**amends the 2026-08-29 "chain-wide ledger" lock, 2026-09-08**: sync subscriptions reject JOINs *and* subqueries — validated in ditto-core, where subscription DQL compiles with `restrict_to_original_syntax` — so per-store item sync needs the key on the item row) |
+
+Per-store order counts: Kirkland 2,975 · Redmond 5,047 · Everett 6,492 ·
+Spokane 9,831 · Tacoma 26,064 · Bellevue 36,666 · Seattle 54,995 · Online
+55,595. (Same 8-store story as the benchmark, different cities: Microsoft's
+set actually has Everett + Kirkland where the generator had Olympia +
+Vancouver.)
 
 Schema notes the apps should surface as teaching moments:
 
+- **No denormalized display fields** — `orders` has no `customer_name` /
+  `store_name`, `order_items` has no `sku`/`product_name`. The screens get
+  display names through `INNER JOIN`s (`orders ⨝ customers`,
+  `order_items ⨝ products`, `order_items ⨝ orders`). The one deliberate
+  exception: `order_items.store_id` is denormalized from the parent order so
+  per-store sync subscriptions (which reject JOINs) can filter items; where a
+  screen still rides the items⨝orders JOIN it does so to demonstrate the
+  suite's canonical shape, not out of necessity.
 - Composite `_id` on `inventory` (subfield queries + composite-key indexing).
 - MAP fields for CRDT-friendly independent updates (`categories.seasonal_multipliers`,
-  `inventory.location` aisle/shelf/bin, `products.specifications`).
+  `inventory.location` aisle/shelf/bin).
 - Soft-delete `"deleted": false` on every doc.
-- Denormalized display fields on `orders` (`customer_name`, `store_name`).
 - ISO8601 timestamp strings (`order_date`, `created_at`) — sortable/indexable as strings.
+- `"demo_default": true` on the smallest-order store (loader-stamped from
+  `manifest.json`; drives the apps' no-picker first launch).
+- **Id shape**: slugs off the integer PKs (`store_seattle`, `customer_40000`,
+  `order_197663`, `item_1`, `prod_1`, `cat_hand_tools`, `ptype_hammers_1`).
+
+What the transform **derives vs fabricates** (full accounting lives in
+`shared/data/manifest.json → synthesized_fields`):
+
+- Derived from real rows: order `subtotal` (Σ line totals), `item_count` (#
+  line rows), `total` (1.095 × subtotal — mirrors the benchmark's
+  total/subtotal relationship; WA sales-tax-ish).
+- Synthesized (Microsoft's schema lacks the columns; deterministic hash per
+  row, listed per user sign-off): order `status` (60% completed / 26% pending
+  / 10% restocked / 4% cancelled), store `location` (real city/state/zip per
+  named store; fabricated street line), inventory `location` + `last_counted`.
+  The two pgvector embedding tables stay unrestored-into-docs (skipped).
+
+**Repo storage**: `shared/data/*.ndjson.gz` (deterministic gzip, mtime=0).
+**~17 MB gzipped — committed directly, no Git LFS.**
+`shared/data/manifest.json` records counts/sha256, the per-store order
+ranking, the chosen catalog anchors, and the synthesized-fields ledger.
 
 ### 1.2 The benchmark catalog
 
-`benchmarks/retail/benchmarks.json` — 72 named DQL benchmarks
-(`<collection>__<op>__<variant>`), categories: `SELECT`, `INDEX_SELECT`,
-`INSERT`, `UPDATE`, `DELETE`, `EVICT`, `AGGREGATION`, plus 4 `subscription__*`
-queries that are exactly what a Seattle device registers at cold start.
-Each entry: `query`, optional `preQueries`/`postQueries` (index create/drop,
-cleanup), `category`. 23 KB — small enough to bundle into every app.
+`shared/benchmarks.json` — the 96 named DQL benchmarks
+(`benchmarks/retail-joins/benchmarks.json` upstream, `<collection>__<op>__
+<variant>`; categories `SELECT`, `INDEX_SELECT`, `INSERT`, `UPDATE`,
+`DELETE`, `EVICT`, `UPSERT`, `GUARD`, and the JOIN families
+(`JOIN_INNER/LEFT/INDEX_SELECT/AGGREGATION/HAVING/PROJECTION/MULTI/EXTENDED`);
+no `subscription__*` entries — joins in subscriptions are rejected by
+design) — **with the suite's four id-literals repointed to real Microsoft
+rows** by `scripts/sync_benchmarks.sh` applying `shared/catalog_overrides.json`:
+
+| Suite literal (benchmark-generator rows) | Ours (real Microsoft rows) | Patched entries |
+|---|---|---|
+| `order_20221209_0001` | `order_197663` (Seattle, 2024-12-30, 5 items) | orders__select__by_id, orders__join__store_info(+_projection), items__join__orders, items__join__products |
+| `e652232a-…` customer UUID | `customer_40000` (Jasmine Johnston) | customers__select__by_id |
+| `d30977d3-…` customer UUID | `customer_23` (Elizabeth Monroe, 12 orders) | customer__join__orders(+_unfiltered) |
+| sku `HND-0042` | sku `HTHM001600` | products__select__by_sku_indexed |
+
+`scripts/catalog_overrides.py` substitutes in `query`/`sql_equivalent`/
+`preQueries`/`postQueries`, **recomputes `expected_count` for patched entries
+against the bundle** (1 / 1 / 1 / 5 / 5 / 1 / 12 / 12 / 1) and drops their
+`expected_first_rows_hash` (a stale oracle is worse than none). Everything
+else — including `'store_seattle'`, which names a real store in both datasets
+— is byte-identical to the suite. Never hand-edit `shared/benchmarks.json`.
 
 ### 1.3 Reference apps
 
@@ -170,11 +226,16 @@ demoapp-retail/
 ├── .env.template               — see §3.1
 ├── .gitignore
 ├── scripts/
-│   ├── load_data.py            — NDJSON → Ditto Server HTTP API loader (§3)
+│   ├── load_data.py            — bundle (shared/data/) → Ditto Server HTTP API loader (§3)
+│   ├── restore_ms_backup.sh    — restores Microsoft's Postgres backup into a scratch container
+│   ├── prepare_data.py         — MS backup → shared/data/*.ndjson.gz transform (§1.1)
+│   ├── catalog_overrides.py    — literal patch + count restatement for the catalog (§1.2)
 │   ├── vendor_anvil.sh         — copies pinned Anvil ports into vendor/ (§5)
-│   └── sync_benchmarks.sh      — copies benchmarks.json into shared/
+│   └── sync_benchmarks.sh      — copies benchmarks.json into shared/ (+ overrides)
 ├── shared/
-│   └── benchmarks.json         — the 72-query catalog, bundled by every app
+│   ├── benchmarks.json         — the 96-query catalog (literals patched), bundled by every app
+│   ├── catalog_overrides.json  — the four literal substitutions (documented)
+│   └── data/                   — committed gzipped Microsoft-data bundle + manifest.json
 ├── vendor/
 │   └── anvil/                  — pinned snapshot (+ COMMIT file recording the
 │                                 source commit hash of the anvil checkout)
@@ -189,9 +250,23 @@ cut a feature branch before the first commit.
 
 ## 3. Data loader (`scripts/load_data.py`)
 
-Python 3 standard library only (`urllib`, `json`, `argparse`, `concurrent.futures`),
-streams NDJSON line-by-line (handles the 54 MB `order_items-full.ndjson` without
-loading it into memory), zero third-party installs.
+Python 3 standard library only (`urllib`-free `http.client`, `json`, `gzip`,
+`argparse`, `concurrent.futures`), streams NDJSON line-by-line — gzipped via
+`gzip.open` — zero third-party installs. Input: the committed bundle
+`shared/data/` (built by `scripts/prepare_data.py` from Microsoft's shipped
+backup — see §1.1). The loader loads **everything** (no size ladder — user's
+call: load all of Microsoft's data; the app only pulls a per-store slice over
+sync anyway); `--dataset-dir` points at another bundle directory for tests.
+
+`scripts/restore_ms_backup.sh` (maintainer-run) restores Microsoft's
+`zava_retail_2025_07_21_postgres_rls.backup` into a throwaway
+`pgvector/pgvector:pg17` container (podman or docker), and
+`scripts/prepare_data.py` queries it with plain psql and rewrites each row
+into the normalized document shape (§1.1): psql `row_to_json` per row over
+stdin/stdout — no database driver dependency. It gzips each collection
+deterministically (mtime=0 → stable sha256) and writes
+`shared/data/manifest.json` (counts, hashes, per-store order ranking,
+synthesized-fields ledger, the chosen catalog anchors).
 
 ### 3.1 Configuration
 
@@ -222,46 +297,22 @@ Content-Type: application/json
 (v5 API chosen deliberately: `DQL_STRICT_MODE=false`, nested objects behave as
 MAPs — matching SDK 5.x defaults in the apps.)
 
-### 3.2 Sizing model (decision: slice the full files)
+### 3.2 Loading model (decision: load ALL of Microsoft's data)
 
-`--size` selects an **order count**, matching the benchmark's scaling ladder:
-`1k | 5k | 10k | 30k | 100k`. Slices are deterministic and keep all 8 stores
-populated so the store picker always has data to sync.
+No `--size` ladder anymore (that was a benchmark-slice feature; user call,
+2026-09-07: "load all the data regardless of how much it is"). The loader
+bulk-inserts every doc in the bundle — 665,828 docs — at the slice-
+independent defaults below; on the M0 free tier this completes in ~36 s.
 
-> **Why stride-slicing, not front-slicing** (adversarial review M1): the
-> orders file is roughly chronological (2022-12-09 → 2025-06-27), so "first N
-> lines" is a *date prefix* — a 1k slice ends 2022-12-22. The benchmark's date
-> literals anchor at the end of the timeline (`order_date > '2025-05-24'` → 0
-> rows on every prefix slice below ~100k), and id literals like
-> `order_20250115_0001` sit at line ~79,386. Prefix slices would make the Query
-> Runner's headline result counts read 0 at exactly the sizes demos use.
+The loader reads the per-store order counts from `manifest.json` and stamps
+the *smallest* store's document with `"demo_default": true` (all others get
+`false`) — the apps read that flag for their first-launch default store
+(§4.1 step 3). The ranking is stable and data-wide now (Kirkland 2,975
+orders vs Redmond's 5,047 — no near-ties like the generator's ladder had).
 
-| Collection | Slice rule |
-|---|---|
-| `orders` | **bucket stride**: line `i` loads iff `floor(i·N/100,000)` increments — exactly N evenly spaced picks spanning the full 2.5-year timeline at every size, all 8 stores mixed in, deterministic. (A naive "every ⌈100k/N⌉-th line" is wrong at 30k — that would pick 25,000.) Plus anchor docs: **N + a handful** of orders/customers/items that benchmark literals reference. |
-| `order_items` | stream `order_items-full.ndjson`, keep rows whose `order_id` ∈ sliced order set |
-| `customers` | union of `customer_id`s referenced by the sliced orders (referential integrity guaranteed; grows naturally with N) **plus the anchor customers below** |
-| `stores`, `categories`, `products`, `inventory` | always in full (8 / 9 / 400 / 3,167 — small, and cross-store stock checks need every store's inventory) |
-
-**Anchor documents are always included**, at every size: the customers, orders,
-items (and emails) referenced by literals in `benchmarks.json` (e.g. the
-`customers__select__by_email` customer, the `orders__select__by_id` order, the
-`order_items__select__by_id` item — with its parent order pulled in so nothing
-dangles). The loader derives the anchor set from `shared/benchmarks.json`,
-resolving UUID literals by existence-probing the collections they actually
-live in (store `rls_user_id` literals are phantoms and are reported, not
-loaded), so the Query Runner's literal queries return non-zero,
-comparable-ish results on every slice.
-
-At `--size 100k` the customers union rule would silently drop the 458
-customers who never order (review m7) — so **100k special-cases to the full
-variant verbatim** (all 25,000 customers; ~328 K docs total).
-
-`--full-catalog` flag: loads all 25,000 customers regardless of order count
-(mirrors the real subscription design where devices hold the whole customer
-directory). The Customers screen's "25 K-row directory" claim only holds with
-`--full-catalog` or at 100k; smaller sizes show a proportionally growing
-directory, which is the honest story.
+`--only` narrows to specific collections (loader and clearer share it);
+`--verify-only` re-checks server counts against the manifest; `--clear`
+wipes (DELETE … LIMIT loops); `--dry-run` shows the plan offline.
 
 ### 3.3 Behavior
 
@@ -296,23 +347,31 @@ directory, which is the honest story.
 1. Read the three SDK keys from the root `.env` via the platform's mechanism.
 2. `DittoConfig(databaseID, connect: .server(url:))` → `Ditto.open` →
    auth expiration handler → `login(token, development)`.
-3. If no store selected → **store picker** (8 stores from the `stores`
-   collection, synced over an always-on shared subscription). Selection is
-   persisted (UserDefaults / SharedPreferences / `shared_preferences` /
-   AsyncStorage).
-4. Register subscriptions — the four `subscription__*` queries from
-   `benchmarks.json` **verbatim** (so the app's sync cost is literally the
-   benchmark's cold-start measurement), with the store literal parameterized
-   as `:storeId`, plus the remaining shared-catalog subscriptions. These
-   strings stay visible at the call site (teaching-first, no query-builder
-   wrappers):
+3. No-persisted-selection boot (first launch): once the shared `stores`
+   catalog syncs in, select the store the loader flagged `demo_default` —
+   the smallest-order store of the loaded slice, so the first sync is the
+   cheapest — and land straight on the tabs, **no picker step**. The picker
+   remains reachable on demand (Dashboard header menu / Ditto tab → Switch
+   store); while the catalog is still empty the picker's "waiting for sync /
+   seed Big Peer" empty-state doubles as the no-data state. Fallback for
+   unflagged catalogs (old loads): first physical store by name. Runs once
+   per launch; selection is persisted (UserDefaults / SharedPreferences /
+   `shared_preferences` / AsyncStorage).
+4. Register subscriptions — sync subscriptions **cannot JOIN** (rejected at
+   registration: ditto-core compiles subscription DQL with
+   `restrict_to_original_syntax`; subqueries don't even parse). Since the
+   filter key must live on the synced row itself, `order_items` carries a
+   `store_id` denormalized from its parent order and joins the per-store
+   tier. DQL strings stay visible at the call site (teaching-first, no
+   query-builder wrappers):
 
 ```sql
 -- shared catalog (registered once)
 SELECT * FROM stores
 SELECT * FROM categories
+SELECT * FROM product_types
 SELECT * FROM products
-SELECT * FROM customers WHERE deleted = false          -- subscription__customers_all
+SELECT * FROM customers   WHERE deleted = false
 
 -- per-store (re-registered when the store changes)
 SELECT * FROM inventory   WHERE _id.store_id = :storeId AND deleted = false
@@ -320,27 +379,30 @@ SELECT * FROM orders      WHERE store_id = :storeId AND deleted = false
 SELECT * FROM order_items WHERE store_id = :storeId AND deleted = false
 ```
 
-5. Create the subscription-supporting indexes the benchmark prescribes
-   (`CREATE INDEX IF NOT EXISTS … ON inventory (_id.store_id)`, on
-   `orders (store_id, deleted)`, on `order_items (store_id, deleted)`) under
-   **app-namespaced names** (`zava_*`) at startup — the mflix convention. The
-   benchmark README is explicit that composite-`_id` subfield queries need an
-   explicit index (the auto-`_id` index doesn't help), and without them every
-   store switch re-scans 25K/50K local docs. App index names are disjoint from
-   the benchmark's names so the Query Runner's `DROP INDEX` postQueries can
-   never drop the app's own indexes (review m6).
+5. Create the supporting indexes under **app-namespaced names** (`zava_*`) at
+   startup — the mflix convention: `zava_inventory_store ON inventory
+   (_id.store_id)` (composite-`_id` subfield queries need an explicit index),
+   `zava_orders_store ON orders (store_id, deleted)`, `zava_order_items_store
+   ON order_items (store_id)` (per-store item subscription path),
+   `zava_order_items_order ON order_items (order_id)` (order-detail lookup
+   path). JOIN inner legs need
+   no indexes — every app join probes `_id`, which is an ID scan. App index
+   names are disjoint from the benchmark's names so the Query Runner's
+   `DROP INDEX` postQueries can never drop the app's own indexes.
 6. `sync.start()`.
 
 **Store switch flow** (a showcase interaction): cancel the three per-store
-subscriptions → `EVICT … WHERE store_id != :newStore` on the per-store
-collections (local-only removal — the EVICT vs DELETE distinction is a
-teaching moment) → register subscriptions for the new store → sync status UI
-shows the new slice arriving. Two documented caveats the screen must respect
-(review m8): Ditto's sync guidance warns against changing subscriptions more
-often than ~every 15 minutes (interrupts in-flight transfers) — the UI
-nudges accordingly; and docs already in flight from the old subscription can
-land after the EVICT, so the flow re-evicts once `system:data_sync_info`
-shows the old subscription drained.
+subscriptions → `EVICT … WHERE store_id != :newStore` on `orders`,
+`inventory` and `order_items` (local-only removal — the EVICT vs DELETE
+distinction is a teaching moment; items are per-store-evictable thanks to the
+denormalized `store_id`) → register subscriptions for the new store → sync
+status UI
+shows the new slice arriving. Two documented caveats the screen must
+respect (review m8): Ditto's sync guidance warns against changing
+subscriptions more often than ~every 15 minutes (interrupts in-flight
+transfers) — the UI nudges accordingly; and docs already in flight from the
+old subscription can land after the EVICT, so the flow re-evicts once
+`system:data_sync_info` shows the old subscription drained.
 
 ### 4.2 Screens
 
@@ -354,10 +416,12 @@ inventory itself is fixed:
 2. **Orders** — list with status filter chips + "last 30 days" date-range
    filter **anchored to `max(order_date)` in the local store, not to the
    device clock** (the dataset ends 2025-06-27; a naive `now() - 30d` filter
-   returns zero rows in 2026 — review Mn5); order detail = order doc + its
-   items via the canonical two-query pattern (`orders` by `_id`, then
-   `order_items` by `order_id`) with an inline callout that DQL v5.0 has no
-   JOINs.
+   returns zero rows in 2026 — review Mn5). List rows and search are one live
+   `orders ⨝ customers` INNER JOIN (paged `LIMIT/OFFSET` + debounced ILIKE);
+   order detail = the joined row + items via `order_items ⨝ products` INNER
+   JOIN (names/SKUs live on `products` now) — the v5.1 replacement for the
+   two-query pattern, with an inline callout that subscriptions still can't
+   JOIN.
 3. **Products (catalog)** — category chips, `base_price BETWEEN` range filter,
    SKU search; product detail shows **stock at all 8 stores**
    (`inventory WHERE _id.product_id = :id`) — the "check another location"
@@ -375,20 +439,23 @@ inventory itself is fixed:
    (never per iteration), so indexed vs no-index pairs are demonstrable
    on-device. Three rules make this correct against a *live synced* store
    (adversarial review M2/M5):
-   - **Store substitution**: 28 of 72 benchmarks hard-code `'store_seattle'`.
+    - **Store substitution**: 15 of 96 benchmarks hard-code `'store_seattle'`.
      The runner substitutes the currently selected store into `store_id` /
      `_id.store_id` literals, and the substitution is visible in the DQL
      viewer — the queries are otherwise verbatim.
-   - **Mutating categories** (INSERT/UPDATE/DELETE/EVICT) are badged and sit
-     behind a confirm step. The benchmark's cleanup uses `EVICT`, which is
-     *local-only* — on a synced device the synthetic doc would replicate to
-     Big Peer and every other demo device, and its plain-INSERT preQueries
-     would then fail on repeat runs. So on synced runs the runner (a) gives
-     synthetic `_id`s a per-run UUID suffix and (b) substitutes `DELETE` for
-     the cleanup `EVICT` (tombstones propagate; the mesh ends clean). The UI
-     copy explains both deviations — they are themselves the EVICT-vs-DELETE
-     teaching moment. EVICT benchmarks keep their semantics explained, not
-     executed against shared data.
+    - **Mutating categories** (INSERT/UPDATE/DELETE/EVICT/**UPSERT** — UPSERT
+      writes bench docs too) are badged and sit
+      behind a confirm step. The benchmark's cleanup uses `EVICT`, which is
+      *local-only* — on a synced device the synthetic doc would replicate to
+      Big Peer and every other demo device, and its plain-INSERT preQueries
+      would then fail on repeat runs. So on synced runs the runner (a) gives
+      synthetic `_id`s a per-run UUID suffix and (b) substitutes `DELETE` for
+      the cleanup `EVICT` (tombstones propagate; the mesh ends clean). The UI
+      copy explains both deviations — they are themselves the EVICT-vs-DELETE
+      teaching moment. For EVICT-category entries the propagating DELETE
+      reuses the EVICT's whole WHERE clause (scalar/composite `_id` and bulk
+      `order_id = …` predicates alike). EVICT benchmarks keep their semantics
+      explained, not executed against shared data.
    - **Result-count honesty**: with anchor documents included by the loader
      (§3.2), literal queries return non-zero at every size; counts still
      differ from published benchmark numbers on sliced datasets, which the
@@ -534,22 +601,27 @@ reference, not redesigns.
   the development token the apps use. Both live in the gitignored root `.env`.
   API keys expire after max one year; `.env.template` says so, so a demo
   doesn't mysteriously 401 next year.
-- **Cold-start sync cost**: at 100k, a Seattle device syncs **~101 K docs —
-  ~30 MB raw NDJSON, more on-device** after CBOR/CRDT metadata and indexes
-  (the benchmark README's "~93 K" is stale against its own data-stats; the
-  app's unfiltered customers subscription adds the difference). That's the
-  demo's headline moment (watch `system:data_sync_info` fill in) — but it
-  also means first-run UX must show sync progress honestly rather than a
-  spinner.
+- **Cold-start sync cost**: with the full Microsoft dataset loaded and items
+  syncing per-store, a Kirkland (default, smallest) device syncs the shared
+  catalog + 2,975 orders + 6,223 items; Seattle, the heaviest, pulls 54,995
+  orders + 115,247 items (per-store item counts computed from the bundle —
+  the chain-wide 414K-item ledger was the original design, amended
+  2026-09-08 because it dominated sync volume). Defaulting first launch to
+  the smallest-order store (`demo_default`) keeps the first sync cheapest.
+  That's the demo's headline moment (watch `system:data_sync_info` fill in) —
+  but it also means first-run UX must show sync progress honestly rather than
+  a spinner.
 - **Query runner mutations**: mitigated by design (§4.2.6) — per-run UUID
   suffixes on synthetic `_id`s + `DELETE` substituted for the cleanup `EVICT`
   on synced runs + confirm gate. Without this, EVICT-only cleanup would leave
   synthetic docs on Big Peer that re-sync to every device and break repeat
   runs (plain-INSERT identifier conflicts).
-- **Slice vs. benchmark fidelity**: stride slices keep every query non-zero at
-  every size, but sliced result counts are not the published benchmark
-  numbers — the runner says so on-screen. `--size 100k` is the faithful
-  configuration.
+- **Literal-anchor fidelity**: the suite's id-literal queries point at real
+  Microsoft rows via `catalog_overrides.json` (§1.2) and the restated counts
+  match this dataset exactly; the suite-stamped `expected_count` values on
+  unpatched entries benchmark the *generator's* data and WILL differ here
+  (e.g. per-store order counts) — the runner shows both numbers, which is the
+  honest story.
 - **No MongoDB**: unlike mflix there's no Atlas/connector setup — Big Peer is
   seeded purely through the HTTP API. Simpler story, fewer moving parts.
 - **Anvil drift**: vendored snapshot can go stale; `vendor_anvil.sh` +

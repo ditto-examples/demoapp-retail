@@ -158,7 +158,7 @@ actor DittoManager {
         return dir
     }
 
-    // MARK: - Subscriptions (PLAN §4.1 — the four subscription__* queries verbatim)
+    // MARK: - Subscriptions (PLAN §4.1)
 
     private func registerSharedSubscriptions(on ditto: Ditto) throws {
         guard sharedSubscriptions.isEmpty else { return }
@@ -167,19 +167,30 @@ actor DittoManager {
         // the caller's teardown) rather than leaked as anonymous live subs.
         try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM stores"))
         try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM categories"))
+        try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM product_types"))
         try sharedSubscriptions.append(ditto.sync.registerSubscription(query: "SELECT * FROM products"))
-        // subscription__customers_all: the full customer directory — a
-        // walk-in could be anyone, so devices hold all of them.
+        // The full customer directory — a walk-in could be anyone, so devices
+        // hold all of them.
         try sharedSubscriptions.append(ditto.sync.registerSubscription(
             query: "SELECT * FROM customers WHERE deleted = false"
         ))
+        // order_items syncs PER-STORE (see applyStoreSelection): items carry
+        // a store_id denormalized from the parent order because sync
+        // subscriptions reject JOINs (and subqueries) — validated against
+        // ditto-core, where subscription DQL compiles with
+        // restrict_to_original_syntax.
     }
 
     /// The benchmark README is explicit: composite-_id subfield queries need
     /// an explicit index (the auto-_id index does not help). App-namespaced
     /// (`zava_*`) so the Query Runner's benchmark postQueries (DROP INDEX on
-    /// benchmark names) can never drop the app's own indexes.
+    /// benchmark names) can never drop the app's own indexes. JOIN inner legs
+    /// hit ID scans (all app joins key on `_id`), so no join indexes are
+    /// needed — only these per-store/order lookup paths.
     private func createSupportingIndexes(on ditto: Ditto) async throws {
+        try await ditto.store.execute(
+            query: "CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id)"
+        ).dematerializeItems()
         try await ditto.store.execute(
             query: "CREATE INDEX IF NOT EXISTS zava_inventory_store ON inventory (_id.store_id)"
         ).dematerializeItems()
@@ -187,7 +198,7 @@ actor DittoManager {
             query: "CREATE INDEX IF NOT EXISTS zava_orders_store ON orders (store_id, deleted)"
         ).dematerializeItems()
         try await ditto.store.execute(
-            query: "CREATE INDEX IF NOT EXISTS zava_order_items_store ON order_items (store_id, deleted)"
+            query: "CREATE INDEX IF NOT EXISTS zava_order_items_order ON order_items (order_id)"
         ).dematerializeItems()
     }
 
@@ -225,11 +236,11 @@ actor DittoManager {
         }
         storeSubscriptions = []
 
-        // Evict data from any previous store. All three per-store collections
-        // carry a top-level store_id (inventory has both that and the
-        // composite _id), so one simple predicate works everywhere.
+        // Evict data from any previous store. orders, inventory AND
+        // order_items are all per-store (items carry the store_id
+        // denormalized from their parent order — subscriptions can't JOIN).
         do {
-            for collection in ["order_items", "orders", "inventory"] {
+            for collection in ["orders", "inventory", "order_items"] {
                 try await ditto.store.execute(
                     query: "EVICT FROM \(collection) WHERE store_id != :storeId",
                     arguments: ["storeId": storeId]
@@ -276,7 +287,7 @@ actor DittoManager {
     private func reEvictIfCurrent(storeId: String, epoch: Int) async {
         guard selectionEpoch == epoch, ditto != nil else { return }
         Self.log.info("re-evict pass for \(storeId, privacy: .public)")
-        for collection in ["order_items", "orders", "inventory"] {
+        for collection in ["orders", "inventory", "order_items"] {
             // Re-check the epoch after every suspension, same discipline as
             // the primary switch path: a newer selection must not watch the
             // old pass evict ITS freshly-syncing rows.
@@ -421,7 +432,7 @@ actor DittoManager {
 
     /// Registers a store observer: results are decoded on the serial delivery
     /// queue (cursors dematerialized immediately), then latest-wins coalesced
-    /// at 100 ms before hopping to the main actor — so a 25K-row customers
+    /// at 100 ms before hopping to the main actor — so a 50K-row customers
     /// sync storm can't make full decodes queue up behind each other.
     ///
     /// - Parameter onDecodeError: schema drift surfaces here instead of as a

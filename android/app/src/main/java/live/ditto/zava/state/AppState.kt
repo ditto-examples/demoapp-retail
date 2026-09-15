@@ -42,6 +42,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private val _selectedStoreId = MutableStateFlow(prefs.getString(KEY_SELECTED_STORE, null))
     val selectedStoreId: StateFlow<String?> = _selectedStoreId.asStateFlow()
 
+    /// Drives the root when no store is selected: the picker appears only for
+    /// an explicit "Switch store" or when the store catalog hasn't synced yet
+    /// — first launch auto-selects the smallest-order store instead
+    /// (`Store.demo_default`, stamped by the loader).
+    private val _showStorePicker = MutableStateFlow(false)
+    val showStorePicker: StateFlow<Boolean> = _showStorePicker.asStateFlow()
+
     /// The one global error surface — the banner at the top of the root.
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
@@ -55,6 +62,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     val multicastConfig: StateFlow<MulticastConfig> = _multicastConfig.asStateFlow()
 
     private var storesObserver: DittoStoreObserver? = null
+    /// Once per launch: the auto-default selection happens exactly once, so it
+    /// can never override a deliberate user pick later in the session.
+    private var didAutoSelectDefaultStore = false
 
     companion object {
         private const val TAG = "AppState"
@@ -134,6 +144,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 storesObserver = DittoManager.observe<Store>("SELECT * FROM stores") { stores ->
                     Log.i(TAG, "stores observer fired: ${stores.size} stores")
                     _stores.value = stores.sortedBy { it.store_name }
+                    autoSelectDefaultStoreIfNeeded()
                 }
                 _selectedStoreId.value?.let { persisted ->
                     if (DittoManager.isValidStoreId(persisted)) {
@@ -155,7 +166,24 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /// First-launch default (no picker step): as soon as the store catalog has
+    /// synced, select the store the loader flagged `demo_default` — the one
+    /// with the fewest orders in the loaded slice, i.e. the smallest first
+    /// sync. Fallback for unflagged catalogs (older loads): the first physical
+    /// store by name, then any store. Runs once per launch and never
+    /// overrides a user pick.
+    private fun autoSelectDefaultStoreIfNeeded() {
+        if (_selectedStoreId.value != null || didAutoSelectDefaultStore || _stores.value.isEmpty()) return
+        val defaultStore = _stores.value.firstOrNull { it.demo_default == true }
+            ?: _stores.value.firstOrNull { !it.is_online }
+            ?: _stores.value.first()
+        didAutoSelectDefaultStore = true
+        Log.i(TAG, "auto-selecting default store: ${defaultStore.store_id}")
+        selectStore(defaultStore.store_id)
+    }
+
     fun selectStore(storeId: String) {
+        _showStorePicker.value = false
         _selectedStoreId.value = storeId
         persistSelection(storeId)
         viewModelScope.launch {
@@ -166,13 +194,17 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 // Roll the UI back to whatever the manager actually serves.
                 _selectedStoreId.value = DittoManager.currentStoreId
                 persistSelection(DittoManager.currentStoreId)
+                if (_selectedStoreId.value == null) {
+                    _showStorePicker.value = true
+                }
             }
         }
     }
 
-    /// Returns to the store picker. The current store keeps syncing until a
-    /// new selection replaces it (per-store subscriptions stay live).
+    /// Shows the on-demand store picker. The current store keeps syncing
+    /// until a new selection replaces it (per-store subscriptions stay live).
     fun switchStore() {
+        _showStorePicker.value = true
         _selectedStoreId.value = null
         persistSelection(null)
     }

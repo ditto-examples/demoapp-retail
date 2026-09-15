@@ -9,10 +9,11 @@ import '../../state/app_state.dart';
 import '../components.dart';
 
 BadgeStatus _categoryStatus(String category) => switch (category) {
-      'SELECT' => BadgeStatus.info,
+      'SELECT' || 'GUARD' => BadgeStatus.info,
       'INDEX_SELECT' => BadgeStatus.promo,
       'AGGREGATION' => BadgeStatus.success,
-      'INSERT' => BadgeStatus.warning,
+      _ when category.startsWith('JOIN_') => BadgeStatus.success,
+      'INSERT' || 'UPSERT' => BadgeStatus.warning,
       'UPDATE' || 'DELETE' || 'EVICT' => BadgeStatus.critical,
       _ => BadgeStatus.info,
     };
@@ -205,13 +206,15 @@ class _BenchmarkDetailScreenState extends ConsumerState<BenchmarkDetailScreen> {
                   child: Column(children: [
                     if (_result != null) ...[
                       _resultRow('Result count', '${formatInt(_result!.resultCount)} rows'),
+                      if (widget.entry.expected_count != null)
+                        _resultRow('Expected on full dataset', '${formatInt(widget.entry.expected_count!)} rows'),
                       _resultRow('Mean', '${_result!.stats.meanMs.toStringAsFixed(2)} ms'),
                       _resultRow('Median', '${_result!.stats.medianMs.toStringAsFixed(2)} ms'),
                       _resultRow('p95', '${_result!.stats.p95Ms.toStringAsFixed(2)} ms'),
                       _resultRow('Min / Max', '${_result!.stats.minMs.toStringAsFixed(2)} / ${_result!.stats.maxMs.toStringAsFixed(2)} ms'),
                       const SizedBox(height: 8),
                       Text(
-                        '${_result!.iterations} timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple.',
+                        '${_result!.iterations} timed iterations, execution only (no rendering). The benchmark harness uses pilot + warmup + 50 iterations; this screen keeps it simple. The expected count comes from the suite\'s full-dataset oracle. Only the ten MS-anchored entries carry counts restated for THIS dataset (catalog_overrides.py); every other count is the suite\'s own number — title-row query text is ground truth, counts are orientation.',
                         style: TextStyle(fontSize: 12, color: colors.foregroundSubtle),
                       ),
                     ],

@@ -37,11 +37,20 @@ final class AppState {
 
     var lastError: String?
 
+    /// Drives RootView when no store is selected: the picker appears only for
+    /// an explicit "Switch store" or when the store catalog hasn't synced yet
+    /// — first launch auto-selects the smallest-order store instead
+    /// (`Store.demo_default`, stamped by the loader).
+    var showStorePicker = false
+
     /// The live Ditto instance (Sendable) — the Tools tab hands it to
     /// DittoAllToolsMenu. Published after open.
     private(set) var ditto: Ditto?
 
     private var storesObserver: DittoStoreObserver?
+    /// Once per launch: the auto-default selection happens exactly once, so it
+    /// can never override a deliberate user pick later in the session.
+    private var didAutoSelectDefaultStore = false
 
     init() {
         // UI-test hook: force the store picker on launch regardless of any
@@ -82,8 +91,8 @@ final class AppState {
             ditto = instance
             Logger.sync.info("Ditto open; sync started")
 
-            // The store picker and dashboard header observe the shared
-            // (unfiltered) stores collection.
+            // The dashboard header and the (on-demand) store picker observe
+            // the shared (unfiltered) stores collection.
             if storesObserver == nil {
                 storesObserver = try await DittoManager.shared.observe(
                     "SELECT * FROM stores",
@@ -91,6 +100,7 @@ final class AppState {
                 ) { [weak self] stores in
                     Logger.sync.info("stores observer fired: \(stores.count) stores")
                     self?.stores = stores.sorted { $0.store_name < $1.store_name }
+                    self?.autoSelectDefaultStoreIfNeeded()
                 }
             }
 
@@ -105,12 +115,27 @@ final class AppState {
         }
     }
 
+    /// First-launch default (no picker step): as soon as the store catalog has
+    /// synced, select the store the loader flagged `demo_default` — the one
+    /// with the fewest orders in the loaded slice, i.e. the smallest first
+    /// sync. Fallback for unflagged catalogs (older loads): the first physical
+    /// store by name. Runs once per launch and never overrides a user pick.
+    private func autoSelectDefaultStoreIfNeeded() {
+        guard selectedStoreId == nil, !didAutoSelectDefaultStore, !stores.isEmpty else { return }
+        guard let defaultStore = stores.first(where: { $0.demo_default == true })
+            ?? stores.first(where: { !$0.is_online }) ?? stores.first else { return }
+        didAutoSelectDefaultStore = true
+        Logger.sync.info("auto-selecting default store: \(defaultStore.store_id, privacy: .public)")
+        selectStore(defaultStore.store_id)
+    }
+
     /// Store switch showcase (PLAN §4.1): re-points subscriptions and evicts
     /// the old store's data. Called from the store picker and the Ditto tab.
     /// On failure the UI rolls back to whatever store the manager actually
     /// serves, and the error surfaces in the banner (never a silent divergence
     /// between the store name on screen and the synced data).
     func selectStore(_ storeId: String) {
+        showStorePicker = false
         selectedStoreId = storeId
         Task {
             do {
@@ -118,14 +143,19 @@ final class AppState {
             } catch {
                 lastError = "Store switch failed: \(error.localizedDescription)"
                 selectedStoreId = await DittoManager.shared.currentStoreId
+                if selectedStoreId == nil {
+                    showStorePicker = true
+                }
             }
         }
     }
 
-    /// "Switch store" — returns to the picker; the per-store subscriptions for
-    /// the current store stay live until a new selection replaces them (and
-    /// evicts its data), so the dashboard never shows an empty-limbo state.
+    /// "Switch store" — shows the on-demand picker; the per-store
+    /// subscriptions for the current store stay live until a new selection
+    /// replaces them (and evicts its data), so the dashboard never shows an
+    /// empty-limbo state.
     func switchStore() {
+        showStorePicker = true
         selectedStoreId = nil
     }
 }

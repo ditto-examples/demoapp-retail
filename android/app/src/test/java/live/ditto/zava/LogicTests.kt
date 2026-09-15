@@ -48,17 +48,20 @@ class LogicTests {
     @Test
     fun ordersSearchQueryShape() {
         val q = OrdersState.searchQuery
-        assertTrue(q.contains("order_id ILIKE :like"))
-        assertTrue(q.contains("customer_name ILIKE :like"))
-        assertTrue(q.contains("store_id = :storeId"))
-        assertTrue(q.contains("ORDER BY order_date DESC, _id DESC"))
+        assertTrue(q.contains("INNER JOIN customers AS c ON o.customer_id = c._id"))
+        assertTrue(q.contains("o.order_id ILIKE :like"))
+        assertTrue(q.contains("c.first_name ILIKE :like"))
+        assertTrue(q.contains("c.last_name ILIKE :like"))
+        assertTrue(q.contains("o.store_id = :storeId"))
+        assertTrue(q.contains("ORDER BY o.order_date DESC, o._id DESC"))
         assertTrue(q.contains("LIMIT 50"))
+        assertFalse("no denormalized fields in the join shape", q.contains("customer_name"))
     }
 
     @Test
     fun ordersSearchTermSanitization() {
         assertEquals("20250115", OrdersState.sanitizedSearchTerm("  20250115  "))
-        assertEquals("20250115_0001", OrdersState.sanitizedSearchTerm("#20250115_0001"))
+        assertEquals("197663", OrdersState.sanitizedSearchTerm("#197663")) // list renders order_197663 as #197663
         assertEquals("", OrdersState.sanitizedSearchTerm("##"))
         assertEquals("", OrdersState.sanitizedSearchTerm("   "))
         assertEquals("2025%", OrdersState.sanitizedSearchTerm("2025%")) // wildcards pass through
@@ -110,11 +113,12 @@ class LogicTests {
             ?: File("../../shared/benchmarks.json")
         assertTrue("benchmarks.json must be reachable from the test working dir", file.exists())
         val catalog = BenchmarkCatalog.parse(file.readText())
-        assertEquals(72, catalog.entries.size)
+        assertEquals(96, catalog.entries.size)
         val collections = catalog.groups.map { it.collection }
         assertTrue(collections.contains("orders"))
-        assertTrue(collections.contains("subscription"))
         assertTrue(collections.contains("order_items"))
+        assertTrue("the retail-joins catalog's JOIN groups must ship in the bundle",
+            collections.contains("joins"))
         // Groups and entries are sorted.
         assertEquals(collections.sorted(), collections)
     }

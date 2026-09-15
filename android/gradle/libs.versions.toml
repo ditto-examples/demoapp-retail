@@ -9,8 +9,8 @@ activityCompose = "1.13.0"
 composeBom = "2026.08.00"
 
 # Ditto SDK + official tools (PLAN §1.3 baselines; mflix ships these).
-ditto = "5.1.0"
-dittoTools = "6.0.0"
+ditto = { require = "[5.0.1,6.0.0)", prefer = "5.1.0" }
+dittoTools = { require = "[6.0.0,7.0.0)", prefer = "6.0.0" }
 
 # Serialization for models + the bundled benchmark catalog.
 kotlinxSerialization = "1.9.0"

@@ -22,10 +22,11 @@ reference and the Android app; Riverpod 3 for app-level state.
 
 Prereqs: **fvm** (this repo pins Flutter **3.47.0** via `.fvmrc` — run
 everything through `fvm flutter …`), platform toolchains for your target
-(Android SDK / Xcode), and the repository-root `.env` (see
-[../README.md](../README.md) → Quickstart for the five values and where to
-find them in the Ditto portal). Seed Big Peer first if you want data on
-launch: `python3 ../scripts/load_data.py`.
+(Android SDK / Xcode), and the repository-root `.env` — see
+[../README.md](../README.md) → Quickstart for how to create a Ditto account
++ database, the five values to copy from the Portal's **Connect** tab, and
+where to find them. Seed Big Peer first if you want data on launch:
+`python3 ../scripts/load_data.py`.
 
 ```sh
 fvm flutter pub get

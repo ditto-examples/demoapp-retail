@@ -53,7 +53,26 @@ the query running under every screen.
 
 ## Quickstart
 
-### 1. Create your `.env`
+### 1. Get a Ditto account and a database
+
+You need a Ditto Portal account and a database (the portal calls them
+*apps*; a Database ID is the tenant your data lives in):
+
+1. **Create an account** — [Creating a Ditto Account](https://docs.ditto.live/cloud/portal/creating-a-ditto-account)
+   (email + password, or Google SSO; optional MFA). Sign in at
+   [portal.ditto.live](https://portal.ditto.live/).
+2. **Create a database** — [Creating a New Database](https://docs.ditto.live/cloud/portal/creating-a-new-app):
+   create an organization, then "Let's Create a Database!" → name + slug →
+   visibility → **Create Database**. Free tiers have a fixed cap on the
+   number of databases.
+3. **Copy your connection details** — [Getting SDK Connection Details](https://docs.ditto.live/cloud/portal/getting-sdk-connection-details):
+   select the database, open the **Connect** tab, and you'll see the
+   **Database ID**, **Auth URL** and **Websocket URL** under *Big peer
+   connection information*, plus the **Online Playground Authentication
+   Token** under *Authentication Mode* (fine for demos — it lets you explore
+   Ditto without wiring up your own auth).
+
+### 2. Create your `.env`
 
 The apps and the data loader read a single `.env` at the **repository root**
 (gitignored — never commit it). Copy the template:
@@ -62,22 +81,21 @@ The apps and the data loader read a single `.env` at the **repository root**
 cp .env.template .env
 ```
 
-Then fill in five values from your Ditto app
-([portal.ditto.live](https://portal.ditto.live/) → your app):
+Then fill in five values from the database you just created:
 
 | Key | Where to find it | Used by |
 |---|---|---|
-| `DITTO_DATABASE_ID` | Portal → your app → **App ID** | Apps (SDK) |
-| `DITTO_DEVELOPMENT_TOKEN` | Portal → your app → **Auth** (playground token) | Apps (SDK) |
-| `DITTO_SERVER_URL` | Portal → your app → **Auth** → websocket URL | Apps (SDK) |
-| `DITTO_API_KEY` | Portal → your app → **Auth** → New API key (read+write) | Data loader |
-| `DITTO_HTTP_API_URL` | Portal → your app → **Connecting via HTTP** → Cloud URL | Data loader |
+| `DITTO_DATABASE_ID` | Portal → your database → **Connect** → Database ID | Apps (SDK) |
+| `DITTO_DEVELOPMENT_TOKEN` | Portal → your database → **Connect** → Online Playground Authentication Token | Apps (SDK) |
+| `DITTO_SERVER_URL` | Portal → your database → **Connect** → Websocket URL | Apps (SDK) |
+| `DITTO_API_KEY` | Portal → your database → **Auth** → New API key (read+write) | Data loader |
+| `DITTO_HTTP_API_URL` | Portal → your database → **Connecting via HTTP** → Cloud URL Endpoint | Data loader |
 
 Only the first three are needed to *build and run* an app — but without data
 to sync, the apps will sit at "waiting for the store catalog". Seed your Big
-Peer in step 2.
+Peer in step 3.
 
-### 2. Load the data
+### 3. Load the data
 
 Push the full transformed Microsoft dataset into your Big Peer (~36 s on a
 free M0):
@@ -95,7 +113,7 @@ merge into a mismatched dataset (use `--replace` for that). Afterwards it
 `COUNT`s each collection on the server and verifies against the manifest
 (`--verify-only` re-runs just the check).
 
-### 3. Run an app
+### 4. Run an app
 
 Follow the build guide for your platform (table above). First launch skips
 the store picker: the app auto-selects Kirkland (the smallest store, 2,975

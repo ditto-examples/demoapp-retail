@@ -7,8 +7,8 @@ DittoManager, DQL visible at call sites, benchmark transformations) apply here.
 ## Environment
 
 - **fvm-managed Flutter**: pinned via `.fvmrc` to **3.47.0** (Dart 3.13.0 —
-  the M3 verification gate; `ditto_live` 5.1.0 + `ditto_flutter_tools` 3.0.0
-  verified building on it). Run everything through fvm:
+  the M3 verification gate; `ditto_live` 5.2.0 + `ditto_flutter_tools` 3.0.0
+  verified building on it — re-verified on 5.2.0, 2026-10-27). Run everything through fvm:
   `cd flutter && fvm flutter …`.
 - **Env**: `.env` at the repo root, injected at build/run time with
   `--dart-define-from-file=../.env` (String.fromEnvironment reads).
@@ -19,7 +19,7 @@ DittoManager, DQL visible at call sites, benchmark transformations) apply here.
 
 ## Platform build gotchas (already worked around — don't regress)
 
-- **Android compileSdk**: Ditto's `transports-android` 5.1.x requires
+- **Android compileSdk**: Ditto's `transports-android` 5.2.x requires
   compileSdk 36+, but `ditto_flutter_tools` pins 35. `android/build.gradle.kts`
   forces every library subproject to `compileSdk = 36` in an `afterEvaluate`
   block that MUST run before `evaluationDependsOn(":app")`.

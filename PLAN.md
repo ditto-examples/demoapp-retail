@@ -196,10 +196,11 @@ Two reference codebases, used for different things:
   official Ditto tools package per platform.
 
 Ditto SDK baselines (match mflix, bump to latest stable 5.x at build time):
-Swift `DittoSwift` 5.0.3 + `DittoSwiftTools` 10.0.0 · Android `ditto-kotlin`
-5.1.0 + `ditto-tools-android` 6.0.0 · Flutter `ditto_live` ^5.0.3 +
+Swift `DittoSwift` 5.2.0 + `DittoSwiftTools` 10.0.0 · Android `ditto-kotlin`
+5.2.0 + `ditto-tools-android` 6.0.0 · Flutter `ditto_live` ^5.2.0 +
 `ditto_flutter_tools` ^3.0.0 · RN `@dittolive/ditto` ^5.0.3 +
-`@dittolive/ditto-react-native-tools` ^2.0.0.
+`@dittolive/ditto-react-native-tools` ^2.0.0. (All three shipped apps bumped
+5.1.0 → 5.2.0 on 2026-10-27; builds + unit tests re-verified per app.)
 
 ### 1.4 Anvil (design system)
 
@@ -312,12 +313,17 @@ orders vs Redmond's 5,047 — no near-ties like the generator's ladder had).
 
 `--only` narrows to specific collections (loader and clearer share it);
 `--verify-only` re-checks server counts against the manifest; `--clear`
-wipes (DELETE … LIMIT loops); `--dry-run` shows the plan offline.
+wipes (DELETE … LIMIT loops); `--replace` wipes then loads in one explicit
+operation; `--dry-run` shows the plan offline. A normal load preflights each
+target count and refuses to overlay a mismatched older bundle: DQL upserts
+cannot remove documents that are absent from the new bundle.
 
 ### 3.3 Behavior
 
 - Batched `INSERT … DOCUMENTS (:docs) ON ID CONFLICT DO UPDATE` — idempotent
-  re-runs (safe to resume after interruption). (Batch-by-array is explicitly
+  re-runs against the same bundle. Before writing, the loader accepts only an
+  empty target or exact manifest counts; otherwise it refuses a silent dataset
+  overlay and requires explicit `--replace`. (Batch-by-array is explicitly
   supported: any `DOCUMENTS` parameter may be an array of docs, each element
   inserted separately — verified against the DQL INSERT docs.)
 - Batch sized self-imposed (~1 MB body / 500 docs ceiling to start — note
@@ -481,7 +487,7 @@ Deliberately thin — the SDK is the star:
 - **Swift**: modern Xcode (16+, verified on the latest installed), **Swift 6
   language mode** (`SWIFT_VERSION = 6.0`, `SWIFT_STRICT_CONCURRENCY = complete`,
   `SWIFT_APPROACHABLE_CONCURRENCY = YES`), iOS 17+ deployment. SPM:
-  `DittoSwift` 5.1.x, `DittoSwiftTools`, local `Anvil` package. **Swift 6 is a
+  `DittoSwift` 5.2.x, `DittoSwiftTools`, local `Anvil` package. **Swift 6 is a
   redesign, not a recompile** (review B2) — but the redesign is already proven:
   we adapt ditto-edge-studio's `DittoManager` patterns verbatim (actor
   singleton, `nonisolated` sync funnels with `Task.detached(.utility)`,
@@ -504,8 +510,10 @@ Deliberately thin — the SDK is the star:
   mix `:anvil-cmp` and `:anvil-material3` in one app. Proven-compatible
   anchors: ditto-edge-studio ships Ditto `ditto-kotlin-android` 5.1.0 on AGP
   9.2.1 / Kotlin 2.3.21 / Gradle 9.4.1 / compileSdk 37, and mflix ships
-  `ditto-kotlin` 5.1.0 on AGP 9.3.1 / Kotlin 2.4.10 — our pins sit inside that
-  proven envelope. **Toolchain-skew risk** (review M1-platform): vendored
+  `ditto-kotlin` 5.1.0 on AGP 9.3.1 / Kotlin 2.4.10 — our toolchain pins sit
+  inside that proven envelope; the Ditto SDK itself has since been bumped to
+  5.2.0 (2026-10-27, API-compatible minor, validated by each app's build +
+  test suite). **Toolchain-skew risk** (review M1-platform): vendored
   Anvil pins AGP 8.13.2 / Kotlin 2.2.21 / CMP 1.9.3 but a composite build runs
   *one* Gradle runtime — the app's (~9.7). M0 spike 1 remains: hello-world
   Compose app consuming the trimmed vendor copy via `includeBuild`; decide
@@ -513,7 +521,7 @@ Deliberately thin — the SDK is the star:
   the vendored copy.
 - **Flutter**: **Flutter 3.41+** (modern stable, with its bundled Dart — Anvil
   requires ≥ 3.32, so 3.41 satisfies it; Ditto's documented ceiling is
-  "3.24 → 3.38+", so `ditto_live` 5.1.x + `ditto_flutter_tools` on 3.41 is an
+  "3.24 → 3.38+", so `ditto_live` 5.2.x + `ditto_flutter_tools` on 3.41 is an
   explicit M3 verification gate), `provider`, Anvil `path:` dep (fonts bundled
   by the package). Note: Flutter is not currently installed on this machine —
   root README prereq.
@@ -576,8 +584,8 @@ tracked as a follow-up task.
 | M0 | Scaffold + loader + **build spikes** | git init + branch, `.env.template`, Anvil vendored; **spike 1 ✅ (2026-08-30):** hello-world Compose app consumes vendored Anvil via `includeBuild` under Gradle 9.7 — required re-pinning vendored Anvil to AGP 9.3.1/Kotlin 2.4.10 (scripted in `vendor_anvil.sh`), runtime pixel-verified on emulator; **spike 2 ✅ (2026-08-30):** 500-doc batches accepted by Big Peer, zero retries; `--size 1k` end-to-end green (all counts exact), idempotent re-run confirmed, `--clear` wipes to zero, `--size 100k` soak = 328,341 docs verified in ~20 s of upload |
 | M1 | **SwiftUI reference app** ✅ (2026-08-30) | Spike 3 passed (edge-studio patterns compile clean under Swift 6 strict, zero warnings, iOS **and** macOS 26); all screens + store switch + Query Runner; verified end-to-end by UI tests against the live 100k dataset (picker→Seattle→dashboard KPIs sync in; runner executes `orders__select__by_id` → exactly 1 row) + Anvil token pixel-verification in light and dark tiers + 9 unit tests. One real bug caught by testing: DQL GROUP BY projections must be group keys/aggregates only (dropped `product_name` from the top-products card — now verbatim benchmark). **Quality gates (2026-08-30):** SwiftLint fatal build phase (0 violations incl. `--strict`; custom `sync_start`/`Ditto.open` choke-point rules), SwiftFormat authority, 85% coverage gate via `make coverage` (91% measured), periphery dead-code sweeps. Post-review adversarial pass found 7 majors (observer lifecycle leaks, open()/store-switch races, missing coalescing + error surfaces) — all fixed and covered by new tests |
 | M2 | Android port | Feature/UX parity with M1, composite-build Anvil, tablet rail/detail layouts |
-| M3 | Flutter port | Feature/UX parity; **gate:** `ditto_live` 5.1.x + `ditto_flutter_tools` verified on Flutter 3.41+ (Ditto's documented ceiling is 3.38+) — **PASSED** 2026-09-01: 5.1.0 + tools 3.0.0 build on fvm Flutter 3.47.0 (Android APK + iOS sim); live sim run verified through "8 stores" sync (riverpod chosen over `provider` per user directive; build gotchas in flutter/AGENTS.md) |
-| M4 | RN/Expo port | Feature/UX parity, dev-client builds; **gate:** `@dittolive/ditto` 5.1.x + tools' native peers verified on Expo 57's RN/React |
+| M3 | Flutter port | Feature/UX parity; **gate:** `ditto_live` 5.1.x + `ditto_flutter_tools` verified on Flutter 3.41+ (Ditto's documented ceiling is 3.38+) — **PASSED** 2026-09-01: 5.1.0 + tools 3.0.0 build on fvm Flutter 3.47.0 (Android APK + iOS sim); live sim run verified through "8 stores" sync (riverpod chosen over `provider` per user directive; build gotchas in flutter/AGENTS.md). Ditto since bumped to **5.2.0** (2026-10-27; analyze + tests + APK + iOS sim build re-verified) |
+| M4 | RN/Expo port | Feature/UX parity, dev-client builds; **gate:** `@dittolive/ditto` 5.2.x + tools' native peers verified on Expo 57's RN/React |
 | M5 | Polish | READMEs per app, root README quickstart (incl. Flutter/Xcode/Android Studio/Node prereqs), AGENTS.md, screenshots, `.env` docs, verify all four against one shared dataset |
 
 **Platform plumbing checklist** — owned by every app milestone M1–M4 (review

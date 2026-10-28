@@ -49,8 +49,8 @@ final class OrdersState {
 
     /// Projection shared by the paged observer and search — one row per order
     /// with the joined customer display name. Does NOT project `o._id`
-    /// (observer-shaped JOIN emissions namespace `_id` per alias; the row
-    /// derives it from `order_id`).
+    /// (pre-5.2.0 observer JOIN emissions namespaced `_id` per alias; the row
+    /// derives it from `order_id`, which decodes under both shapes).
     nonisolated static let selectList =
         "o.order_id, o.store_id, o.order_date, o.status, o.subtotal, " +
         "o.total, o.item_count, o.customer_id, c.first_name, c.last_name"
@@ -440,7 +440,7 @@ private struct OrderRow: View {
 /// Order detail = the order row (already joined to its customer by the list)
 /// plus its line items through a second INNER JOIN (order_items ⨝ products) —
 /// product names/SKUs live only on the products collection in the normalized
-/// schema. Ditto SDK 5.1 runs both joins on-device; sync subscriptions can't
+/// schema. Ditto SDK 5.2 runs both joins on-device; sync subscriptions can't
 /// JOIN, which is why items carry a denormalized store_id and sync per-store.
 struct OrderDetailView: View {
     let order: OrderSummaryRow
@@ -551,7 +551,7 @@ struct OrderDetailView: View {
     One INNER JOIN per hop: the list joined orders ⨝ customers for the name \
     on this card, and this screen joins order_items ⨝ products for the item \
     names and SKUs. The normalized dataset carries ids only (no embedded \
-    customer_name / product_name copies) — Ditto SDK 5.1 resolves them \
+    customer_name / product_name copies) — Ditto SDK 5.2 resolves them \
     on-device. This is the benchmark's items__join__products shape with a \
     parameterized order id.
     """

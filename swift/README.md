@@ -6,7 +6,7 @@ SwiftUI, one target for iPhone/iPad and Mac.
 
 ## Stack
 
-- **Ditto**: `DittoSwift` 5.1.0 + `DittoSwiftTools` 10.0.0 (Tools tab)
+- **Ditto**: `DittoSwift` 5.2.0 + `DittoSwiftTools` 10.0.0 (Tools tab)
 - **Design system**: [Anvil](../vendor/anvil/swift/Anvil) (vendored SPM
   package; fonts registered at launch via `FontRegistration`)
 - **Architecture**: `actor DittoManager` (the only Ditto access point) +

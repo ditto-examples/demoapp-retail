@@ -329,8 +329,9 @@ class OrderSummaryRow {
   final String order_id;
 
   // == the order doc's `_id` (order ids are `order_…` slugs). Computed, NOT
-  // deserialized: registerObserver emissions on JOINs namespace `_id` per
-  // collection alias ({o: …, c: …}) — never project `o._id` there.
+  // deserialized: pre-5.2.0 registerObserver emissions on JOINs namespaced
+  // `_id` per collection alias ({o: …, c: …}); deriving from `order_id`
+  // decodes under both shapes.
   String get id => order_id;
   final String store_id;
   final String order_date;

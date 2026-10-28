@@ -203,6 +203,31 @@ class VerifyTest(unittest.TestCase):
         self.assertIn("MISMATCH", text)
 
 
+class PreflightTest(unittest.TestCase):
+    def run_preflight(self, counts, expected):
+        def handler(stmt):
+            for name in ld.LOAD_ORDER:
+                if f"FROM {name}" in stmt:
+                    return {"items": [{"count": counts.get(name, 0)}]}
+            raise AssertionError(stmt)
+        out = io.StringIO()
+        with contextlib.redirect_stderr(out):
+            ok = ld.preflight(StubClient(handler), expected, set(expected))
+        return ok, out.getvalue()
+
+    def test_accepts_empty_or_exact_target(self):
+        expected = {"orders": 5, "products": 3}
+        self.assertTrue(self.run_preflight({}, expected)[0])
+        self.assertTrue(self.run_preflight(expected, expected)[0])
+
+    def test_rejects_mixed_target_before_load(self):
+        ok, text = self.run_preflight({"orders": 9, "products": 3},
+                                      {"orders": 5, "products": 3})
+        self.assertFalse(ok)
+        self.assertIn("orders: 9 existing, bundle expects 5", text)
+        self.assertIn("--replace", text)
+
+
 class ArgumentValidation(unittest.TestCase):
     """Flag validation fires before any filesystem/network work."""
 
@@ -218,6 +243,12 @@ class ArgumentValidation(unittest.TestCase):
 
     def test_clear_with_verify_only_rejected(self):
         self.assertEqual(self.run_main(["--clear", "--verify-only"]), 2)
+
+    def test_replace_with_dry_run_rejected(self):
+        self.assertEqual(self.run_main(["--replace", "--dry-run"]), 2)
+
+    def test_clear_and_replace_rejected(self):
+        self.assertEqual(self.run_main(["--clear", "--replace"]), 2)
 
     def test_unknown_collection_rejected(self):
         self.assertEqual(self.run_main(["--only", "bogus"]), 2)

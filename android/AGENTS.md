@@ -58,7 +58,8 @@ shape (DQL strings verbatim, same copy, same states).
   breaking rendezvous). Multicast connections show as `Multicast` in
   presence (the MulticastScreen badges the live count) and the tools Peers
   view.
-  **CRITICAL platform constraint (verified on-device, 5.1.0): multicast
+  **CRITICAL platform constraint (verified on-device on 5.1.0; matches the
+  documented 5.1+ behavior — not yet re-verified on 5.2.0): multicast
   config changes are DEFERRED while sync is active** — the SDK logs
   "Reliable UDP multicast configuration changes are deferred while sync is
   active on this platform; stop sync, set the transport configuration, and

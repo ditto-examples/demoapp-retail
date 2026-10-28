@@ -3,17 +3,17 @@ import Foundation
 import XCTest
 @testable import ZavaRetail
 
-/// SDK contract lock-in: on JOIN queries, `registerObserver` emissions can
-/// namespace `_id` per collection alias (`{o: "order_…", c: "customer_…"}`)
-/// while one-shot `execute` returns the projected `o._id` alias as a flat
-/// String. (Found 2026-09-07 when the Orders screen froze after the
-/// Microsoft-data cutover: the page observer's OrderSummaryRow decode kept
-/// failing on `_id`; reproduced with this exact query shape and the store's
-/// MAP-`_id` inventory doc present.) App rule (see OrderSummaryRow): never
-/// project `o._id` in a JOIN that an observer consumes — derive identity
-/// from the business key column instead.
+/// SDK contract lock-in: on JOIN queries, one-shot `execute` returns the
+/// projected `o._id` alias as a flat String. SDK 5.1.x observer emissions
+/// namespaced `_id` per collection alias (`{o: "order_…", c: "customer_…"}`)
+/// instead — found 2026-09-07 when the Orders screen froze after the
+/// Microsoft-data cutover. **Fixed in SDK 5.2.0** (verified 2026-10-27 by
+/// A/B: 5.1.0 emits the namespaced map, 5.2.0 emits the flat String):
+/// `registerObserver` now matches `execute`. App rule (see OrderSummaryRow)
+/// stands regardless: derive identity from the business key column, so the
+/// row decodes under BOTH shapes.
 final class JoinObserverContractTests: XCTestCase {
-    func testJoinObserverNamespacesIdButExecuteFlattensIt() async throws {
+    func testJoinObserverAndExecuteBothFlattenId() async throws {
         let ditto = try await Self.openIsolatedNode()
         defer { Self.removeIsolatedStore() }
 
@@ -38,36 +38,42 @@ final class JoinObserverContractTests: XCTestCase {
         let execId = result.items.first?.value["_id"] as? String
         XCTAssertNotNil(execId, "execute should return the o._id alias flat")
 
-        // Path 2: registerObserver — `_id` arrives namespaced by alias.
-        let observedId = try await firstEmission(query: query, in: ditto) as? [String: Any?]
-        let namespaced = try XCTUnwrap(
-            observedId,
-            "observer emissions namespace _id per collection alias in JOINs"
+        // Path 2: registerObserver — since SDK 5.2.0, `_id` arrives flat,
+        // identical to execute. (5.1.x namespaced it per alias here.)
+        let observedId = try await firstEmission(query: query, in: ditto)
+        let flat = try XCTUnwrap(
+            observedId as? String,
+            "observer emissions return the projected _id flat since SDK 5.2.0"
         )
-        XCTAssertEqual(namespaced["o"] as? String, "order_1")
-        XCTAssertEqual(namespaced["c"] as? String, "customer_1")
+        XCTAssertEqual(flat, "order_1")
 
-        try assertSummaryRowDecodesFromNamespacedEmission()
+        try assertSummaryRowDecodesFromEitherEmissionShape()
     }
 
     /// Consequence the app relies on: OrderSummaryRow (o._id omitted from the
-    /// projection) decodes from an observer-style emission — rows whose only
-    /// `_id` key is the namespaced map PLUS projected fields.
-    private func assertSummaryRowDecodesFromNamespacedEmission() throws {
-        let emissionJSON: [String: Any] = [
-            "_id": ["o": "order_1", "c": "customer_1"],
+    /// projection) decodes from BOTH the 5.2.0 flat emission and the legacy
+    /// 5.1.x namespaced `_id` map — the projection choice is robust across
+    /// the SDK behavior change.
+    private func assertSummaryRowDecodesFromEitherEmissionShape() throws {
+        let fields: [String: Any] = [
             "order_id": "order_1", "store_id": "store_kirkland",
             "order_date": "2026-12-13T00:00:00Z", "status": "completed",
             "subtotal": 891.05, "total": 975.7, "item_count": 5,
             "customer_id": "customer_1", "first_name": "Jennifer",
             "last_name": "Roberts"
         ]
-        let row = try JSONDecoder().decode(
-            OrderSummaryRow.self,
-            from: JSONSerialization.data(withJSONObject: emissionJSON)
-        )
-        XCTAssertEqual(row.id, "order_1")
-        XCTAssertEqual(row.customerName, "Jennifer Roberts")
+        let idShapes: [[String: Any]] = [
+            ["_id": "order_1"],                                        // 5.2.0 flat
+            ["_id": ["o": "order_1", "c": "customer_1"]]               // 5.1.x namespaced
+        ]
+        for idShape in idShapes {
+            let row = try JSONDecoder().decode(
+                OrderSummaryRow.self,
+                from: JSONSerialization.data(withJSONObject: fields.merging(idShape) { _, new in new })
+            )
+            XCTAssertEqual(row.id, "order_1")
+            XCTAssertEqual(row.customerName, "Jennifer Roberts")
+        }
     }
 
     // MARK: - Fixtures

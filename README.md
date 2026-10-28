@@ -38,11 +38,15 @@ Four apps, one shared blueprint — see [PLAN.md](PLAN.md) for the full design:
    ```sh
    python3 scripts/load_data.py
    # dry run first if you like:  python3 scripts/load_data.py --dry-run
-   # reset the server:           python3 scripts/load_data.py --clear
+   # replace an older bundle:    python3 scripts/load_data.py --replace
+   # wipe without loading:       python3 scripts/load_data.py --clear
    ```
 
    The loader reads the **committed gzipped bundle** in `shared/data/`
-   (~17 MB, no Git LFS needed) and is idempotent (`ON ID CONFLICT DO UPDATE`).
+   (~17 MB, no Git LFS needed) and is idempotent (`ON ID CONFLICT DO UPDATE`)
+   when the target already holds this bundle. Before a normal load it checks
+   each collection count and refuses to merge a mismatched/older dataset; use
+   `--replace` to explicitly clear and reload instead.
    It stamps the store with the fewest orders — Kirkland, 2,975 — as
    `"demo_default": true`, per `shared/data/manifest.json`.
 

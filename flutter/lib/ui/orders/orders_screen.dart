@@ -33,8 +33,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   /// with the joined customer display name.
   /// Projection shared by the paged observer and search — one row per order
   /// with the joined customer display name. Does NOT project `o._id`:
-  /// registerObserver emissions on JOINs namespace `_id` per collection alias
-  /// ({o: …, c: …}) — the row derives its id from `order_id`.
+  /// pre-5.2.0 registerObserver emissions on JOINs namespaced `_id` per
+  /// collection alias ({o: …, c: …}) — the row derives its id from
+  /// `order_id`, correct under both shapes.
   static const selectList =
       'o.order_id, o.store_id, o.order_date, o.status, o.subtotal, '
       'o.total, o.item_count, o.customer_id, c.first_name, c.last_name';
@@ -53,7 +54,7 @@ ORDER BY o.order_date DESC, o._id DESC LIMIT 50''';
   static const baseFrom = joinedFrom;
 
   static const screenExplanation =
-      "The orders list is a LIVE observer over this store's orders INNER JOINed to customers — the normalized schema carries customer ids only, so the name on each row comes from the join (Ditto SDK 5.1, on-device). New matches appear as sync delivers them, no refresh step. The query shown above is the exact one running (cutoff/args resolved).\n\nPagination is LIMIT/OFFSET in DQL over the join: the visible slice runs ORDER BY o.order_date DESC, o._id DESC LIMIT <pageSize> OFFSET <(page−1)×pageSize>, while a second live observer runs COUNT(*) over the same joined FROM — so the page count climbs as sync delivers. The o._id tiebreaker keeps OFFSET paging stable (no skipped or repeated rows across pages).\n\n\"Recent only\" anchors to max(order_date) IN THE DATA (the benchmark dataset ends 2025-06-27), not the device clock — a naive now-minus-30-days filter would show zero rows. Search runs one-shot case-insensitive ILIKE queries on order number and the JOINED customer's first/last name (500 ms debounce, capped at 50 rows) — '%' and '_' in your input act as wildcards, and search matches across all dates (it ignores the \"Recent only\" filter); clear it (×) to return to the live, paginated list.";
+      "The orders list is a LIVE observer over this store's orders INNER JOINed to customers — the normalized schema carries customer ids only, so the name on each row comes from the join (Ditto SDK 5.2, on-device). New matches appear as sync delivers them, no refresh step. The query shown above is the exact one running (cutoff/args resolved).\n\nPagination is LIMIT/OFFSET in DQL over the join: the visible slice runs ORDER BY o.order_date DESC, o._id DESC LIMIT <pageSize> OFFSET <(page−1)×pageSize>, while a second live observer runs COUNT(*) over the same joined FROM — so the page count climbs as sync delivers. The o._id tiebreaker keeps OFFSET paging stable (no skipped or repeated rows across pages).\n\n\"Recent only\" anchors to max(order_date) IN THE DATA (the benchmark dataset ends 2025-06-27), not the device clock — a naive now-minus-30-days filter would show zero rows. Search runs one-shot case-insensitive ILIKE queries on order number and the JOINED customer's first/last name (500 ms debounce, capped at 50 rows) — '%' and '_' in your input act as wildcards, and search matches across all dates (it ignores the \"Recent only\" filter); clear it (×) to return to the live, paginated list.";
 
   var _orders = <OrderSummaryRow>[];
   var _totalCount = 0;
@@ -387,7 +388,7 @@ class _OrderRow extends StatelessWidget {
 /// Order detail = the order row (already joined to its customer by the list)
 /// plus its line items through a second INNER JOIN (order_items ⨝ products) —
 /// product names/SKUs live only on the products collection in the normalized
-/// schema. Ditto SDK 5.1 runs both joins on-device; sync subscriptions can't
+/// schema. Ditto SDK 5.2 runs both joins on-device; sync subscriptions can't
 /// JOIN, which is why items carry a denormalized store_id and sync per-store.
 class OrderDetailScreen extends ConsumerStatefulWidget {
   const OrderDetailScreen({super.key, required this.order});
@@ -404,7 +405,7 @@ class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
       'FROM order_items AS oi INNER JOIN products AS p ON oi.product_id = p._id '
       'WHERE oi.order_id = :orderId AND oi.deleted = false';
   static const explanation =
-      "One INNER JOIN per hop: the list joined orders ⨝ customers for the name on this card, and this screen joins order_items ⨝ products for the item names and SKUs. The normalized dataset carries ids only (no embedded customer_name / product_name copies) — Ditto SDK 5.1 resolves them on-device. This is the benchmark's items__join__products shape with a parameterized order id.";
+      "One INNER JOIN per hop: the list joined orders ⨝ customers for the name on this card, and this screen joins order_items ⨝ products for the item names and SKUs. The normalized dataset carries ids only (no embedded customer_name / product_name copies) — Ditto SDK 5.2 resolves them on-device. This is the benchmark's items__join__products shape with a parameterized order id.";
 
   var _items = <OrderLineRow>[];
   String? _error;

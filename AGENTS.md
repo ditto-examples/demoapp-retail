@@ -36,7 +36,7 @@ answers.
 | Task | Command |
 |---|---|
 | Load data (full MS dataset) | `python3 scripts/load_data.py` (dry-run: `--dry-run`) |
-| Reset Big Peer data | `python3 scripts/load_data.py --clear` |
+| Replace Big Peer data with the committed bundle | `python3 scripts/load_data.py --replace` (wipe only: `--clear`) |
 | Restore MS backup (scratch container) | `scripts/restore_ms_backup.sh` |
 | Rebuild data bundle | `python3 scripts/prepare_data.py` (then re-run sync_benchmarks.sh) |
 | Re-vendor Anvil | `scripts/vendor_anvil.sh` |

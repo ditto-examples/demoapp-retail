@@ -131,6 +131,15 @@ object DittoManager {
                 applyMulticastToInstance(instance, pendingMulticastConfig)
                 if (pendingMulticastConfig.enabled) acquireMulticastLock()
             }
+            // Pin the sync websocket to ws:// for a plaintext Big Peer. The SDK
+            // otherwise upgrades the server URL's scheme to wss:// and the TLS
+            // handshake fails against a plain-HTTP ingress. Must be set BEFORE
+            // sync starts (same platform rule as multicast below).
+            config.plaintextSyncWebSocketURL()?.let { wsUrl ->
+                instance.updateTransportConfig { transportConfig ->
+                    transportConfig.connect.websocketUrls = mutableSetOf(wsUrl)
+                }
+            }
             startSyncNow(instance)
         } catch (e: Exception) {
             // Never pin a half-initialized instance.
@@ -396,7 +405,6 @@ object DittoManager {
                 // already in trouble).
                 result.items.forEach { it.dematerialize() }
             }
-            Unit
         }
     }
 
@@ -426,7 +434,6 @@ object DittoManager {
             } finally {
                 result.items.forEach { it.dematerialize() }
             }
-            Unit
         }
     }
 

@@ -5,7 +5,7 @@ import SwiftUI
 /// browsable by collection. Every query is runnable against the live synced
 /// store with timing — this is how the app "shows off" the benchmark
 /// (PLAN §4.2.6). JOIN entries need Ditto SDK 5.1+ (small peer); the apps
-/// pin 5.1.x.
+/// pin 5.2.x.
 struct QueryCatalogView: View {
     @Environment(\.dittoColors) private var colors
     @State private var catalog: BenchmarkCatalog?

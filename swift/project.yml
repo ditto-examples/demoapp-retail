@@ -10,7 +10,7 @@ packages:
     path: ../vendor/anvil/swift/Anvil
   DittoSwiftPackage:
     url: https://github.com/getditto/DittoSwiftPackage
-    exactVersion: 5.1.0
+    exactVersion: 5.2.0
   DittoSwiftTools:
     url: https://github.com/getditto/DittoSwiftTools
     exactVersion: 10.0.0

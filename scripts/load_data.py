@@ -22,6 +22,7 @@ Usage:
   python3 scripts/load_data.py                      # load everything
   python3 scripts/load_data.py --dry-run            # show the plan, no HTTP
   python3 scripts/load_data.py --clear              # wipe all 8 collections
+  python3 scripts/load_data.py --replace            # wipe, then load this bundle
   python3 scripts/load_data.py --only orders,order_items
   python3 scripts/load_data.py --verify-only        # COUNT check vs manifest
 
@@ -38,6 +39,7 @@ import os
 import random
 import re
 import ssl
+import subprocess
 import sys
 import threading
 import time
@@ -85,12 +87,28 @@ def load_config() -> dict:
     return cfg
 
 
+def endpoint_scheme(raw_url: str) -> str:
+    """The URL's scheme, lowercased: "http" or "https" (default "https").
+
+    A self-managed Big Peer is reached over plain HTTP inside the local
+    cluster (the operator's ingress terminates TLS itself, or not at all),
+    while Ditto Cloud is always https. Absent a scheme we keep the historic
+    https default.
+    """
+    match = re.match(r"^([A-Za-z][A-Za-z0-9+.-]*)://", raw_url.strip())
+    if not match:
+        return "https"
+    scheme = match.group(1).lower()
+    return scheme if scheme in ("http", "https") else "https"
+
+
 def execute_endpoint(raw_url: str) -> tuple[str, str]:
-    """Normalize the Cloud URL Endpoint -> (host, path) for an HTTPS POST.
+    """Normalize the Cloud URL Endpoint -> (host, path) for an HTTP POST.
 
     Accepts the portal value with or without scheme (any case), with or
-    without a trailing slash, and with or without the /api/... path. Scheme is
-    always forced to https (BigPeerClient only speaks HTTPS).
+    without a trailing slash, and with or without the /api/... path. The
+    scheme is reported separately by endpoint_scheme(); BigPeerClient speaks
+    both http and https.
     """
     url = re.sub(r"^https?://", "", raw_url.strip(), flags=re.IGNORECASE).rstrip("/")
     parts = urlsplit("https://" + url)
@@ -159,9 +177,10 @@ class BigPeerClient:
     RETRYABLE_STATUSES = {408, 425, 429}
 
     def __init__(self, host: str, path: str, api_key: str, max_attempts: int = MAX_ATTEMPTS,
-                 conn_factory=None, sleep=time.sleep):
+                 conn_factory=None, sleep=time.sleep, scheme: str = "https"):
         self.host, self.path, self.api_key = host, path, api_key
         self.max_attempts = max_attempts
+        self.scheme = scheme
         self._conn_factory = conn_factory
         self._sleep = sleep
         self._local = threading.local()
@@ -171,6 +190,10 @@ class BigPeerClient:
         if conn is None:
             if self._conn_factory is not None:
                 conn = self._conn_factory()
+            elif self.scheme == "http":
+                # Plain HTTP: a self-managed Big Peer's ingress inside the
+                # local cluster serves no TLS.
+                conn = http.client.HTTPConnection(self.host, timeout=120)
             else:
                 ctx = ssl.create_default_context()
                 conn = http.client.HTTPSConnection(self.host, timeout=120, context=ctx)
@@ -210,6 +233,50 @@ class BigPeerClient:
             if attempt < self.max_attempts:
                 self._sleep(min(30.0, 0.5 * 2 ** attempt) + random.uniform(0, 0.5))
         raise RuntimeError(f"request failed after {self.max_attempts} attempts: {last_err}")
+
+
+class SystemCurlClient:
+    """Big Peer client using the operating system's TLS trust store.
+
+    This is an opt-in fallback for environments whose Python CA bundle does
+    not contain the enterprise TLS root but whose system curl trust store does.
+    """
+
+    def __init__(self, host: str, path: str, api_key: str, max_attempts: int = MAX_ATTEMPTS,
+                 scheme: str = "https"):
+        self.url = f"{scheme}://{host}{path}"
+        self.api_key = api_key
+        self.max_attempts = max_attempts
+
+    def execute(self, statement: str, args: dict | None = None) -> dict:
+        payload = json.dumps({"statement": statement, "args": args or {}})
+        last_error = "unknown error"
+        for attempt in range(1, self.max_attempts + 1):
+            response = subprocess.run(
+                [
+                    "curl", "--silent", "--show-error", "--fail-with-body",
+                    "--header", f"Authorization: Bearer {self.api_key}",
+                    "--header", "Content-Type: application/json",
+                    "--data", payload, self.url,
+                ],
+                capture_output=True,
+                text=True,
+            )
+            try:
+                decoded = json.loads(response.stdout)
+            except json.JSONDecodeError:
+                decoded = None
+            if response.returncode == 0 and isinstance(decoded, dict):
+                error = decoded.get("error", {})
+                if not error:
+                    return decoded
+                raise FatalApiError(200, error.get("description", str(error)))
+            if isinstance(decoded, dict) and decoded.get("error"):
+                raise FatalApiError(0, decoded["error"].get("description", str(decoded["error"])))
+            last_error = (response.stderr + response.stdout).strip()[:400]
+            if attempt < self.max_attempts:
+                time.sleep(min(30.0, 0.5 * 2 ** attempt) + random.uniform(0, 0.5))
+        raise RuntimeError(f"curl request failed after {self.max_attempts} attempts: {last_error}")
 
 
 class RetryableApiError(Exception):
@@ -306,6 +373,42 @@ def verify(client: BigPeerClient, expected: dict[str, int], only: set[str]):
     return ok
 
 
+def preflight(client: BigPeerClient, expected: dict[str, int], only: set[str]) -> bool:
+    """Refuse an additive load that would silently merge a different bundle.
+
+    ``ON ID CONFLICT DO UPDATE`` is safely idempotent only when the target has
+    the same collection cardinalities as this bundle. It cannot remove records
+    that belonged to an earlier data shape. Count the target *before* the
+    first insert so an accidental overlay never reaches the final (too-late)
+    verification step.
+
+    A clean target (zero rows) and an existing copy of this exact bundle are
+    both valid. Interrupted/partial loads deliberately require ``--replace``
+    or an explicit operational decision rather than silently accepting an
+    unknown mixture.
+    """
+    mismatches: list[tuple[str, int, int]] = []
+    for name in LOAD_ORDER:
+        if name not in only:
+            continue
+        res = client.execute(f"SELECT COUNT(*) AS count FROM {name}")
+        items = res.get("items") or []
+        actual = list(items[0].values())[0] if items else 0
+        expected_count = expected[name]
+        if actual not in (0, expected_count):
+            mismatches.append((name, actual, expected_count))
+    if not mismatches:
+        return True
+
+    print("error: target contains a different or partial dataset; refusing additive load:",
+          file=sys.stderr)
+    for name, actual, expected_count in mismatches:
+        print(f"  {name}: {actual} existing, bundle expects {expected_count}", file=sys.stderr)
+    print("Use --replace to wipe the selected collections before loading this bundle. "
+          "Use --verify-only to inspect without writing.", file=sys.stderr)
+    return False
+
+
 def clear(client: BigPeerClient, only: set[str]):
     for name in CLEAR_ORDER:
         if name not in only:
@@ -346,6 +449,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", help="comma-separated collections to load/clear")
     ap.add_argument("--clear", action="store_true", help="delete all docs from all 8 collections")
+    ap.add_argument("--replace", action="store_true",
+                    help="delete selected collections, then load this bundle")
     ap.add_argument("--verify-only", action="store_true",
                     help="skip load, just run COUNT verification against the manifest")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; no HTTP")
@@ -353,11 +458,15 @@ def main() -> int:
     ap.add_argument("--batch-docs", type=positive_int, default=MAX_BATCH_DOCS)
     ap.add_argument("--batch-bytes", type=positive_int, default=MAX_BATCH_BYTES)
     ap.add_argument("--concurrency", type=positive_int, default=4)
+    ap.add_argument("--system-curl", action="store_true",
+                    help="use the operating system TLS trust store instead of Python's")
     args = ap.parse_args()
 
-    if args.clear and (args.verify_only or args.dry_run):
-        ap.error("--clear cannot be combined with --verify-only/--dry-run")
-    if args.dry_run and (args.verify_only or args.clear):
+    if args.clear and args.replace:
+        ap.error("--clear and --replace cannot be combined")
+    if (args.clear or args.replace) and (args.verify_only or args.dry_run):
+        ap.error("--clear/--replace cannot be combined with --verify-only/--dry-run")
+    if args.dry_run and (args.verify_only or args.clear or args.replace):
         ap.error("--dry-run stands alone")
 
     only = {c.strip() for c in args.only.split(",") if c.strip()} if args.only else set(LOAD_ORDER)
@@ -404,15 +513,24 @@ def main() -> int:
               f"(see .env.template)", file=sys.stderr)
         return 2
     host, path = execute_endpoint(cfg["DITTO_HTTP_API_URL"])
-    client = BigPeerClient(host, path, cfg["DITTO_API_KEY"])
-    print(f"Target: https://{host}{path}")
+    scheme = endpoint_scheme(cfg["DITTO_HTTP_API_URL"])
+    client = (SystemCurlClient(host, path, cfg["DITTO_API_KEY"], scheme=scheme)
+              if args.system_curl else BigPeerClient(host, path, cfg["DITTO_API_KEY"], scheme=scheme))
+    print(f"Target: {scheme}://{host}{path}")
 
     if args.clear:
         clear(client, only)
         return 0
 
+    if args.replace:
+        print("Replacing selected collections with the committed bundle ...")
+        clear(client, only)
+
     if args.verify_only:
         return 0 if verify(client, expected, only) else 1
+
+    if not args.replace and not preflight(client, expected, only):
+        return 1
 
     started = time.time()
     print(f"Apps' default store: {default_store or '(unflagged)'}")

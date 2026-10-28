@@ -164,10 +164,11 @@ struct OrderItem: Sendable, Codable, Identifiable, Equatable {
 /// customer's display name comes from the join, not from the order document.
 ///
 /// NOTE: `_id` is computed from `order_id` (== the order doc's `_id`) rather
-/// than projected: `registerObserver` on a JOIN emits `_id` namespaced per
-/// collection alias ({o: …, c: …}), which breaks a `String` decode, while
-/// one-shot `execute` returns the projected alias flat. Never project
-/// `o._id` in a JOIN that an observer consumes (JoinObserverContractTests).
+/// than projected: SDK 5.1.x `registerObserver` on a JOIN emitted `_id`
+/// namespaced per collection alias ({o: …, c: …}), which breaks a `String`
+/// decode, while one-shot `execute` returned the projected alias flat. 5.2.0
+/// fixed observers to match execute — deriving identity from `order_id`
+/// decodes under both shapes (JoinObserverContractTests).
 struct OrderSummaryRow: Sendable, Codable, Identifiable, Equatable {
     let order_id: String
     let store_id: String

@@ -1,5 +1,5 @@
 name: zava_retail
-description: "Zava Retail — Flutter port of the Ditto retail benchmark demo (PLAN.md M3)."
+description: "Ditto Retail — Flutter port of the Ditto retail benchmark demo (PLAN.md M3)."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -36,7 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^2.6.1
   shared_preferences: ^2.5.5
-  ditto_live: ^5.1.0
+  ditto_live: ^5.2.0
   ditto_flutter_tools: ^3.0.0
   # Vendored Anvil design system (unpublished upstream — see vendor/anvil/COMMIT).
   # Swap for the published package once Anvil ships to a registry.

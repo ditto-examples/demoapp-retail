@@ -1,17 +1,19 @@
-# AGENTS.md — Zava Retail demo apps
+# AGENTS.md — Ditto Retail demo apps
 
 Multi-platform demo monorepo for Ditto + Microsoft's Zava DIY retail dataset.
+(The dataset keeps the *Zava* name; the apps present as **Ditto Retail**.)
 Read [PLAN.md](PLAN.md) before making architectural decisions; it records the
 locked decisions and the adversarial-review findings this repo's design
-answers.
+answers. Human-facing docs: [README.md](README.md) + the per-platform
+READMEs (`swift/`, `android/`, `flutter/`).
 
 ## Conventions
 
-- **Nearest-file rule**: platform subdirectories may carry their own
-  AGENTS.md (`android/AGENTS.md`, …); the closest one wins.
+- **Nearest-file rule**: platform subdirectories carry their own AGENTS.md
+  (`android/AGENTS.md`, …); the closest one wins.
 - **Never commit credentials**. `.env` is gitignored; `.env.template` is the
-  template. The four apps read the *root* `.env`, each via its own mechanism
-  (see PLAN.md §1.3).
+  template. The apps read the *root* `.env`, each via its own mechanism
+  (see "How a build works" below).
 - **`vendor/` is committed** (Anvil is unpublished). Refresh with
   `scripts/vendor_anvil.sh`; never hand-edit vendored files.
 - **Ditto integration stays visible**: one thin access point per app
@@ -31,12 +33,62 @@ answers.
   regenerate with `scripts/prepare_data.py` (needs the restored MS backup,
   `scripts/restore_ms_backup.sh`); never hand-edit.
 
+## How a build works (setup end to end)
+
+**1. One root `.env`** (gitignored; template `.env.template`) with five keys:
+SDK — `DITTO_DATABASE_ID`, `DITTO_DEVELOPMENT_TOKEN`, `DITTO_SERVER_URL`;
+loader — `DITTO_API_KEY`, `DITTO_HTTP_API_URL`. Each platform injects it
+differently:
+
+| Platform | Mechanism | Re-read when |
+|---|---|---|
+| Android | `app/build.gradle.kts` reads `../.env` → `BuildConfig` | rebuild |
+| Swift | `swift/buildEnv.sh ../.env Generated` → `Generated/Env.swift` (gitignored) | `make setup` |
+| Flutter | `--dart-define-from-file=../.env` (`String.fromEnvironment`) | every build/run |
+
+**2. Seed data**: `python3 scripts/load_data.py` pushes the committed bundle
+to your Big Peer. Apps then sync; without a seeded Big Peer they sit at
+"waiting for the store catalog" — expected, not a bug.
+
+**3. Generated artifacts — never hand-edit, regenerate:**
+
+| Artifact | Regenerate with |
+|---|---|
+| `swift/ZavaRetail.xcodeproj/project.pbxproj` | `cd swift && xcodegen` (or `make setup`) |
+| `swift/Generated/Env.swift` | `cd swift && ./buildEnv.sh ../.env Generated` |
+| `flutter/pubspec.lock`, `flutter/ios/Podfile.lock` | `pub get` / `pod update DittoFlutter --repo-update` |
+| `flutter/assets/benchmarks.json` (symlink → `shared/`) | `scripts/sync_benchmarks.sh` |
+| `shared/data/*.ndjson.gz` | `scripts/prepare_data.py` (needs `restore_ms_backup.sh`) |
+| `vendor/anvil/**` | `scripts/vendor_anvil.sh` |
+
+**4. Bumping the Ditto SDK** — all three floors are ≥ 5.2.0 (bumped
+2026-10-27; companion tools unchanged: `ditto-tools-android` 6.0.0,
+`DittoSwiftTools` 10.0.0, `ditto_flutter_tools` 3.0.0):
+
+| Platform | Pin lives in | Gotcha |
+|---|---|---|
+| Android | `android/gradle/libs.versions.toml`: `ditto = { strictly = "5.2.0", require = "[5.2.0,6.0.0)", prefer = "5.2.0" }` | `prefer` alone loses to ditto-tools' hard request and silently resolves to the range floor — verify with `./gradlew :app:dependencyInsight --dependency ditto-kotlin --configuration debugRuntimeClasspath` |
+| Swift | `swift/project.yml`: `DittoSwiftPackage: from: 5.2.0` | re-resolve and commit `Package.resolved` |
+| Flutter | `flutter/pubspec.yaml`: `ditto_live: ^5.2.0` | `pub get` + `pod update DittoFlutter --repo-update` |
+
+**5. App identity — don't rename the wrong things.** Display name is
+"Ditto Retail" (Android `android:label`, iOS `PRODUCT_NAME: DittoRetail`,
+Flutter `MaterialApp.title`). Identifiers stay: Swift module/target/scheme/
+folders `ZavaRetail`, Android `applicationId`/iOS bundle id `live.ditto.zava`,
+Flutter package `zava_retail`. In `swift/project.yml`, `PRODUCT_NAME`,
+`PRODUCT_MODULE_NAME` (keeps `@testable import ZavaRetail` working) and the
+test targets' `TEST_HOST` must change **together**.
+
+**6. Local Big Peer over LAN**: Android blocks cleartext, so the host in
+`.env` must be listed in `android/app/src/main/res/xml/network_security_config.xml`
+(no CIDR support — hosts are listed individually; iOS/macOS need no change).
+
 ## Commands
 
 | Task | Command |
 |---|---|
 | Load data (full MS dataset) | `python3 scripts/load_data.py` (dry-run: `--dry-run`) |
-| Reset Big Peer data | `python3 scripts/load_data.py --clear` |
+| Replace Big Peer data with the committed bundle | `python3 scripts/load_data.py --replace` (wipe only: `--clear`) |
 | Restore MS backup (scratch container) | `scripts/restore_ms_backup.sh` |
 | Rebuild data bundle | `python3 scripts/prepare_data.py` (then re-run sync_benchmarks.sh) |
 | Re-vendor Anvil | `scripts/vendor_anvil.sh` |
@@ -48,34 +100,18 @@ answers.
 | Swift tests | same + `-only-testing:ZavaRetailTests test` / `-only-testing:ZavaRetailUITests test` |
 | Flutter (fvm-pinned 3.47.0) | `cd flutter && fvm flutter analyze` / `fvm flutter test` / `fvm flutter run -d <device> --dart-define-from-file=../.env` |
 
-## Dataset
+## Dataset (details in PLAN.md §1.2)
 
-The transaction data is **Microsoft's actual shipped Zava DIY dataset**
-(`zava_retail_2025_07_21_postgres_rls.backup` from Microsoft's
-ai-tour-26 repo, sibling checkout `../ai-tour-26-zava-diy-dataset-plus-mcp`),
-transformed by `scripts/prepare_data.py` into the normalized
-`retail-joins` document shape (Ditto SDK 5.1+ JOINs teach-through): 8 stores,
-9 categories, 89 product types, 424 products (real names/SKUs), 50,000
-customers, 3,392 inventory rows, **197,665 orders**, **414,241 order items**
-— 665,828 docs total, loaded wholesale (`--size` ladder removed).
-
-Microsoft's rows are honestly thin in places the apps/catalog exercise, so
-the transform flags every non-cosmetic derivation in
-`shared/data/manifest.json.synthesized_fields`: order `status` (deterministic
-60/26/10/4 spread — MS has no status), order totals (`subtotal`/`item_count`
-aggregated from the real line items; `total = 1.095 × subtotal`), store
-`location` (real WA geography per named store, fabricated address), inventory
-`location`/`last_counted` (deterministic fabrication); `order_items.store_id`
-is joined back from the parent order (denormalized on purpose — per-store
-item sync/evict needs the key on the item row). Ids become slugs
-(`store_seattle`, `customer_40000`, `order_197663`…).
-
-The bundled catalog stays the 96-query `retail-joins` suite, EXCEPT that
-`shared/catalog_overrides.json` + `scripts/sync_benchmarks.sh` point the four
-suite *literals* at real MS rows (`order_197663`, `customer_40000`,
-`customer_23`, sku `HTHM001600`) and restate those entries' expected counts
-for our data (1 / 1 / 12 / 1; the anchor order has 5 line items). Do not
-hand-edit `shared/benchmarks.json` or `shared/data/` — regenerate via
-`scripts/prepare_data.py` then `scripts/sync_benchmarks.sh`. The loader
-reads `manifest.json` and stamps the fewest-orders store (Kirkland, 2,975)
-with `"demo_default": true` (the apps' first-launch default — no picker).
+Microsoft's shipped Zava DIY dataset (665,828 docs: 8 stores, 424 products,
+50,000 customers, 197,665 orders, 414,241 order items) transformed by
+`scripts/prepare_data.py` into the normalized `retail-joins` shape. Every
+non-cosmetic derivation is flagged in `shared/data/manifest.json →
+synthesized_fields` (order `status`, order totals, store/inventory
+`location`); `order_items.store_id` is denormalized on purpose (sync
+subscriptions reject JOINs/subqueries). Ids become slugs (`store_seattle`,
+`customer_40000`, `order_197663`…). The bundled catalog stays the 96-query
+`retail-joins` suite except that `shared/catalog_overrides.json` +
+`scripts/sync_benchmarks.sh` point its four *literals* at real MS rows and
+restate those expected counts. Never hand-edit `shared/benchmarks.json` or
+`shared/data/`. The loader stamps the fewest-orders store (Kirkland, 2,975)
+with `"demo_default": true` — the apps' first-launch default (no picker).

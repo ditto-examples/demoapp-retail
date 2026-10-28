@@ -1,17 +1,25 @@
-# flutter/ — Zava Retail (Flutter port, PLAN M3)
+# flutter/ — Ditto Retail (Flutter port, PLAN M3)
 
 Flutter port of the SwiftUI reference (swift/), UI-matched to the Android app
 (android/). Nearest AGENTS.md wins; the repo root's rules (singleton
 DittoManager, DQL visible at call sites, benchmark transformations) apply here.
+Human-facing build guide: [README.md](README.md).
 
 ## Environment
 
 - **fvm-managed Flutter**: pinned via `.fvmrc` to **3.47.0** (Dart 3.13.0 —
-  the M3 verification gate; `ditto_live` 5.1.0 + `ditto_flutter_tools` 3.0.0
-  verified building on it). Run everything through fvm:
+  the M3 verification gate; `ditto_live` 5.2.0 + `ditto_flutter_tools` 3.0.0
+  verified building on it — re-verified on 5.2.0, 2026-10-27). Run everything through fvm:
   `cd flutter && fvm flutter …`.
 - **Env**: `.env` at the repo root, injected at build/run time with
-  `--dart-define-from-file=../.env` (String.fromEnvironment reads).
+  `--dart-define-from-file=../.env` (String.fromEnvironment reads). Omitting
+  the flag = empty SDK config (a UI error state, not a crash).
+- **SDK pin**: `pubspec.yaml` → `ditto_live: ^5.2.0` (floor ≥5.2.0). After a
+  bump: `fvm flutter pub get` + `pod update DittoFlutter --repo-update`
+  (commit `pubspec.lock` + `ios/Podfile.lock`).
+- **Identity**: display name `MaterialApp.title` in `lib/main.dart` is
+  "Ditto Retail"; the package name stays `zava_retail` and the native labels
+  live in `android/app/src/main/AndroidManifest.xml` + `ios/Runner/Info.plist`.
 - **Assets**: `assets/benchmarks.json` is a SYMLINK to `../shared/benchmarks.json`
   (Flutter assets must live under the package root; the symlink keeps one
   source of truth). Regenerate the target via `scripts/sync_benchmarks.sh`,
@@ -19,7 +27,7 @@ DittoManager, DQL visible at call sites, benchmark transformations) apply here.
 
 ## Platform build gotchas (already worked around — don't regress)
 
-- **Android compileSdk**: Ditto's `transports-android` 5.1.x requires
+- **Android compileSdk**: Ditto's `transports-android` 5.2.x requires
   compileSdk 36+, but `ditto_flutter_tools` pins 35. `android/build.gradle.kts`
   forces every library subproject to `compileSdk = 36` in an `afterEvaluate`
   block that MUST run before `evaluationDependsOn(":app")`.

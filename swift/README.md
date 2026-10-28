@@ -1,12 +1,13 @@
-# Zava Retail — SwiftUI (iOS/iPadOS 26 + macOS 26)
+# Ditto Retail — SwiftUI (iOS/iPadOS 26 + macOS 26)
 
-The reference implementation of the Zava Retail demo app (see
-[../PLAN.md](../PLAN.md)). Swift 6 language mode, strict concurrency,
-SwiftUI, one target for iPhone/iPad and Mac.
+The reference implementation of the Ditto Retail demo app (see
+[../README.md](../README.md) for what it demos and
+[../PLAN.md](../PLAN.md) for the full design). Swift 6 language mode,
+strict concurrency, SwiftUI, one target for iPhone/iPad and Mac.
 
 ## Stack
 
-- **Ditto**: `DittoSwift` 5.1.0 + `DittoSwiftTools` 10.0.0 (Tools tab)
+- **Ditto**: `DittoSwift` 5.2.0 + `DittoSwiftTools` 10.0.0 (Tools tab)
 - **Design system**: [Anvil](../vendor/anvil/swift/Anvil) (vendored SPM
   package; fonts registered at launch via `FontRegistration`)
 - **Architecture**: `actor DittoManager` (the only Ditto access point) +
@@ -23,8 +24,10 @@ open ZavaRetail.xcodeproj   # pick a simulator/device; macOS "My Mac" works too
 ```
 
 Prereqs: Xcode 26+, XcodeGen (`brew install xcodegen`), and the repository
-root `.env` (see `../.env.template`). Seed Big Peer first (full transformed
-Microsoft dataset, ~36 s on a free M0): `python3 ../scripts/load_data.py`.
+root `.env` (see [../README.md](../README.md) → Quickstart for how to create a
+Ditto account + database and the five values to copy from the Portal's
+**Connect** tab). Seed Big Peer first (full transformed Microsoft dataset,
+~36 s on a free M0): `python3 ../scripts/load_data.py`.
 
 Regenerate the project whenever files are added/removed (no synchronized
 groups): `xcodegen`.

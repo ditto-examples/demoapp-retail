@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext HTTP for the LOCAL self-managed Big Peer only.
+
+  The local Ditto Big Peer is served over plain HTTP on the LAN — there is no
+  TLS terminator in front of it — so the SDK's websocket and REST traffic to
+  it has to be allowed to use cleartext. Everything else in the app stays
+  HTTPS-only.
+
+  Android's network security config has no CIDR support, so each host has to
+  be listed individually. If DITTO_SERVER_URL (the root .env) is pointed at a
+  different address, add that host here too, otherwise the SDK's connections
+  are blocked with a "CLEARTEXT communication ... not permitted" error.
+
+  Hosts:
+    192.168.0.254  this Mac, en0 (Wi-Fi) LAN IP  — the value in .env
+    192.168.1.194  this Mac, en11 (Thunderbolt Ethernet) LAN IP — fallback
+    localhost      loopback, for `adb reverse` / a local port-forward
+    127.0.0.1      loopback
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.0.254</domain>
+        <domain includeSubdomains="false">192.168.1.194</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

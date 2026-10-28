@@ -198,7 +198,8 @@ data class OrderSummaryRow(
     val last_name: String? = null,
 ) {
     /** == the order doc's `_id` (order ids are `order_…` slugs) — NOT
-     *  deserialized: observer emissions on JOINs namespace `_id` per alias. */
+     *  deserialized: pre-5.2.0 observer emissions on JOINs namespaced `_id`
+     *  per alias; deriving from `order_id` decodes under both shapes. */
     val _id: String get() = order_id
     val id: String get() = _id
     val customerName: String get() = listOfNotNull(first_name, last_name).joinToString(" ")

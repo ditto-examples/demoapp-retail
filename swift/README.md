@@ -1,8 +1,9 @@
-# Zava Retail — SwiftUI (iOS/iPadOS 26 + macOS 26)
+# Ditto Retail — SwiftUI (iOS/iPadOS 26 + macOS 26)
 
-The reference implementation of the Zava Retail demo app (see
-[../PLAN.md](../PLAN.md)). Swift 6 language mode, strict concurrency,
-SwiftUI, one target for iPhone/iPad and Mac.
+The reference implementation of the Ditto Retail demo app (see
+[../README.md](../README.md) for what it demos and
+[../PLAN.md](../PLAN.md) for the full design). Swift 6 language mode,
+strict concurrency, SwiftUI, one target for iPhone/iPad and Mac.
 
 ## Stack
 

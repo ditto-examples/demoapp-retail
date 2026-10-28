@@ -1,6 +1,23 @@
-# AGENTS.md — swift/ (Zava Retail SwiftUI app)
+# AGENTS.md — swift/ (Ditto Retail SwiftUI app)
 
 Nearest-file rule: this file wins over the root AGENTS.md for work in `swift/`.
+Human-facing build guide: [README.md](README.md).
+
+## Setup & build
+
+- **Env**: root `.env` → `buildEnv.sh` → `Generated/Env.swift` (gitignored).
+  `make setup` runs buildEnv.sh + xcodegen; re-run it after editing `.env`
+  or adding/removing source files.
+- **SDK pin**: `project.yml` → `DittoSwiftPackage: from: 5.2.0` (floor ≥5.2.0;
+  `DittoSwiftTools` stays exact 10.0.0). Re-resolve and commit
+  `Package.resolved` — `xcodebuild -resolvePackageDependencies`.
+- **Identity**: display name `PRODUCT_NAME: DittoRetail`; the module, target,
+  scheme and folder stay `ZavaRetail`, and `PRODUCT_MODULE_NAME: ZavaRetail`
+  is pinned so `@testable import ZavaRetail` keeps working. The test targets'
+  `TEST_HOST` must point at `DittoRetail.app/DittoRetail` (xcodegen derives it
+  from the *target* name — override it). Change all four together.
+- **Generated**: `ZavaRetail.xcodeproj/project.pbxproj` comes from
+  `project.yml` via xcodegen — never hand-edit the pbxproj.
 
 ## Quality bar (enforced)
 

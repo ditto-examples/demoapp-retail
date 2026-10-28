@@ -1,10 +1,29 @@
-# AGENTS.md — android/ (Zava Retail Compose app)
+# AGENTS.md — android/ (Ditto Retail Compose app)
 
 Nearest-file rule: this file wins over the root AGENTS.md for work in `android/`.
+Human-facing build guide: [README.md](README.md).
 
 M2 port of the SwiftUI reference app (swift/) — deliberate 1:1 UX translation,
 not a redesign. When the SwiftUI app changes, port the change here in the same
 shape (DQL strings verbatim, same copy, same states).
+
+## Setup & build
+
+- **Env**: gradle reads the ROOT `../.env` into `BuildConfig` fields
+  (DITTO_DATABASE_ID / DITTO_DEVELOPMENT_TOKEN / DITTO_SERVER_URL) in
+  app/build.gradle.kts — **rebuild** after editing `.env`. Missing config is
+  a UI state, never a crash.
+- **SDK pin**: `gradle/libs.versions.toml` — `ditto = { strictly = "5.2.0",
+  require = "[5.2.0,6.0.0)", prefer = "5.2.0" }`. `prefer` alone silently
+  downgrades to 5.0.1 (ditto-tools' hard request wins); check with
+  `./gradlew :app:dependencyInsight --dependency ditto-kotlin --configuration debugRuntimeClasspath`.
+- **Identity**: display name `android:label="Ditto Retail"`; the package id
+  stays `live.ditto.zava` (don't rename — installed apps/users depend on it).
+- **Cleartext**: a plain-HTTP Big Peer host must be listed in
+  `app/src/main/res/xml/network_security_config.xml` (no CIDR support — list
+  hosts individually). Update it whenever `.env`'s server URL changes.
+- **benchmarks.json**: bundled as an asset via `assets.srcDir("../../shared")`
+  (module-relative path — do not "fix" to ../shared).
 
 ## Commands
 

@@ -1,8 +1,9 @@
-# flutter/ — Zava Retail (Flutter port, PLAN M3)
+# flutter/ — Ditto Retail (Flutter port, PLAN M3)
 
 Flutter port of the SwiftUI reference (swift/), UI-matched to the Android app
 (android/). Nearest AGENTS.md wins; the repo root's rules (singleton
 DittoManager, DQL visible at call sites, benchmark transformations) apply here.
+Human-facing build guide: [README.md](README.md).
 
 ## Environment
 
@@ -11,7 +12,14 @@ DittoManager, DQL visible at call sites, benchmark transformations) apply here.
   verified building on it — re-verified on 5.2.0, 2026-10-27). Run everything through fvm:
   `cd flutter && fvm flutter …`.
 - **Env**: `.env` at the repo root, injected at build/run time with
-  `--dart-define-from-file=../.env` (String.fromEnvironment reads).
+  `--dart-define-from-file=../.env` (String.fromEnvironment reads). Omitting
+  the flag = empty SDK config (a UI error state, not a crash).
+- **SDK pin**: `pubspec.yaml` → `ditto_live: ^5.2.0` (floor ≥5.2.0). After a
+  bump: `fvm flutter pub get` + `pod update DittoFlutter --repo-update`
+  (commit `pubspec.lock` + `ios/Podfile.lock`).
+- **Identity**: display name `MaterialApp.title` in `lib/main.dart` is
+  "Ditto Retail"; the package name stays `zava_retail` and the native labels
+  live in `android/app/src/main/AndroidManifest.xml` + `ios/Runner/Info.plist`.
 - **Assets**: `assets/benchmarks.json` is a SYMLINK to `../shared/benchmarks.json`
   (Flutter assets must live under the package root; the symlink keeps one
   source of truth). Regenerate the target via `scripts/sync_benchmarks.sh`,

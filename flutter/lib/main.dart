@@ -23,7 +23,7 @@ class ZavaRetailApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Zava Retail',
+      title: 'Ditto Retail',
       debugShowCheckedModeBanner: false,
       home: DittoTheme(child: const AppRoot()),
     );

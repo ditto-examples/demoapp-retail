@@ -606,7 +606,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;
-				PRODUCT_NAME = ZavaRetail;
+				PRODUCT_MODULE_NAME = ZavaRetail;
+				PRODUCT_NAME = DittoRetail;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -718,7 +719,7 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ZavaRetail.app/ZavaRetail";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DittoRetail.app/DittoRetail";
 			};
 			name = Release;
 		};
@@ -739,7 +740,8 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = live.ditto.zava;
-				PRODUCT_NAME = ZavaRetail;
+				PRODUCT_MODULE_NAME = ZavaRetail;
+				PRODUCT_NAME = DittoRetail;
 				SDKROOT = auto;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -844,7 +846,7 @@
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ZavaRetail.app/ZavaRetail";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DittoRetail.app/DittoRetail";
 			};
 			name = Debug;
 		};

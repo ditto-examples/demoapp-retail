@@ -89,7 +89,13 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: live.ditto.zava
-        PRODUCT_NAME: ZavaRetail
+        # User-visible app name is "Ditto Retail" (PRODUCT_NAME doubles as the
+        # display name via GENERATE_INFOPLIST_FILE). Module/target/scheme stay
+        # ZavaRetail — the rename is display-only.
+        PRODUCT_NAME: DittoRetail
+        # PRODUCT_MODULE_NAME defaults to PRODUCT_NAME; pin it so the module
+        # stays ZavaRetail and `@testable import ZavaRetail` keeps working.
+        PRODUCT_MODULE_NAME: ZavaRetail
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         # Multiplatform: iOS/iPadOS + macOS, one target (ditto-edge-studio pattern).
@@ -136,6 +142,10 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
+        # xcodegen derives TEST_HOST from the target name (ZavaRetail), but the
+        # app product is renamed DittoRetail (display-name-only rename) —
+        # point the host at the real binary.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/DittoRetail.app/DittoRetail"
 
   ZavaRetailUITests:
     type: bundle.ui-testing

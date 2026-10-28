@@ -13,7 +13,7 @@
   are blocked with a "CLEARTEXT communication ... not permitted" error.
 
   Hosts:
-    192.168.1.84   this Mac, en0 (Wi-Fi) LAN IP  — the value in .env
+    192.168.0.254  this Mac, en0 (Wi-Fi) LAN IP  — the value in .env
     192.168.1.194  this Mac, en11 (Thunderbolt Ethernet) LAN IP — fallback
     localhost      loopback, for `adb reverse` / a local port-forward
     127.0.0.1      loopback
@@ -22,7 +22,7 @@
     <base-config cleartextTrafficPermitted="false" />
 
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">192.168.1.84</domain>
+        <domain includeSubdomains="false">192.168.0.254</domain>
         <domain includeSubdomains="false">192.168.1.194</domain>
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">127.0.0.1</domain>
